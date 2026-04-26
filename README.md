@@ -1,0 +1,1 @@
+Module for switching token images and wildcard without reliance on actor data.
