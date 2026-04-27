@@ -1,0 +1,188 @@
+
+.token-slurp-group {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.token-slurp-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.token-slurp-controls-row .token-slurp-inline-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.token-slurp-controls-row select {
+  flex: 1;
+  min-width: 90px;
+}
+
+/* Override Foundry's 100% width default for buttons */
+.token-slurp-controls-row button,
+.token-slurp-browse,
+.ts-pin-toggle,
+.token-slurp-window .window-header button {
+  width: auto !important;
+  padding: 2px 8px;
+}
+
+.token-slurp-hud-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.token-slurp-hud-btn img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.ts-cell {
+  position: relative;
+  width:  var(--ts-cell-w, 80px);
+  height: var(--ts-cell-h, 80px);
+  cursor: pointer;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.25);
+  transition: border-color 0.1s ease;
+  flex-shrink: 0;
+}
+
+.ts-cell:hover {
+  border-color: var(--color-border-highlight, #ff6400);
+}
+
+.ts-cell--active {
+  border-color: var(--color-border-highlight-alt, #f0d755);
+  box-shadow: 0 0 6px 1px rgba(240, 215, 85, 0.5);
+}
+
+.ts-cell img,
+.ts-cell video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  pointer-events: none;
+}
+
+
+.token-slurp-hud-panel {
+  position: fixed;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  pointer-events: all;
+}
+
+.token-slurp-hud-panel .ts-grid-container {
+  display: grid;
+  grid-template-columns: repeat(var(--ts-cols, 8), var(--ts-cell-w, 80px));
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+/* UI2: ApplicationV2 window */
+
+.token-slurp-window .window-content {
+  padding: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.token-slurp-window .ts-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--ts-cell-w, 140px));
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding: 2px;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+/* Header buttons */
+.token-slurp-window .window-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: visible;
+  padding-inline: 8px;
+}
+
+.token-slurp-window .window-title {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.ts-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ts-pin-toggle {
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 2px 5px !important;
+  flex-shrink: 0;
+}
+
+.ts-pin-toggle.ts-pinned {
+  opacity: 1;
+  color: var(--color-border-highlight, #ff6400);
+}
+
+.ts-anim-select {
+  flex: 1 1 80px;
+  min-width: 0;
+  font-size: 0.8em;
+}
+
+.ts-duration-slider {
+  flex: 2 1 60px;
+  min-width: 40px;
+}
+
+.ts-duration-label {
+  font-size: 0.75em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 38px;
+  text-align: right;
+}
+
+/* Empty state */
+.ts-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--color-text-dark-secondary, #888);
+  font-style: italic;
+}

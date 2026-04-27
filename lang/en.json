@@ -1,0 +1,48 @@
+{
+  "TOKEN_SLURP": {
+    "settings": {
+      "thumbStoragePath": {
+        "name": "Thumbnail Storage Path",
+        "hint": "Path inside your User Data folder where generated thumbnails are saved. Must be writable — do not point this at the modules/ directory. Default: token-slurp/thumbs"
+      },
+      "ui1Cols":       { "name": "Quick Picker: Columns",      "hint": "Number of image columns shown in the HUD inline panel." },
+      "ui1Rows":       { "name": "Quick Picker: Rows",         "hint": "Number of visible rows before the HUD panel scrolls." },
+      "ui1CellWidth":  { "name": "Quick Picker: Cell Width",   "hint": "Width in pixels of each image cell in the HUD inline panel." },
+      "ui1CellHeight": { "name": "Quick Picker: Cell Height",  "hint": "Height in pixels of each image cell in the HUD inline panel." },
+      "ui2CellWidth":  { "name": "Window: Cell Width",         "hint": "Width in pixels of each image cell in the picker window. Columns are filled automatically based on window width." },
+      "ui2CellHeight": { "name": "Window: Cell Height",        "hint": "Height in pixels of each image cell in the picker window." },
+      "ui2DefaultCols":{ "name": "Window: Default Columns",    "hint": "How many cells wide the window starts when first opened. You can resize it freely afterwards." },
+      "ui2DefaultRows":{ "name": "Window: Default Rows",       "hint": "How many cells tall the window starts when first opened. You can resize it freely afterwards." }
+    },
+    "tokenConfig": {
+      "wildcardPath":   "Wildcard Path",
+      "wildcardActive": "Enable Token Slurp",
+      "browse":         "Browse to a file (then add wildcards manually)",
+      "thumbMode": {
+        "label": "Thumb Mode",
+        "auto":  "Thumbnails (auto)",
+        "force": "Thumbnails (always)",
+        "lazy":  "Lazy load (no thumbs)"
+      }
+    },
+    "hud": {
+      "openPanel":  "Token Slurp — quick picker",
+      "openWindow": "Token Slurp — open window"
+    },
+    "window": {
+      "title":     "Token Slurp",
+      "pin":       "Pin open after selection",
+      "animation": "Transition",
+      "duration":  "Duration"
+    },
+    "animation": {
+      "none":  "None",
+      "fade":  "Fade",
+      "swirl": "Swirl",
+      "dots":  "Dots"
+    },
+    "notifications": {
+      "noImages": "Token Slurp: no images found for this wildcard path."
+    }
+  }
+}

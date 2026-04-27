@@ -1,0 +1,40 @@
+<div class="form-group token-slurp-group">
+  <label>{{localize "TOKEN_SLURP.tokenConfig.wildcardPath"}}</label>
+  <div class="form-fields">
+    <input
+      type="text"
+      name="flags.token-slurp.wildcardPath"
+      value="{{wildcardPath}}"
+      placeholder="path/*/to/*/Glob*Pattern*"
+    />
+    <button type="button" class="token-slurp-browse" title="{{localize 'TOKEN_SLURP.tokenConfig.browse'}}">
+      <i class="fas fa-file-import"></i>
+    </button>
+  </div>
+</div>
+
+<div class="form-group token-slurp-group token-slurp-controls-row">
+  <label class="token-slurp-inline-label">
+    <input
+      type="checkbox"
+      name="flags.token-slurp.wildcardActive"
+      {{#if wildcardActive}}checked{{/if}}
+    />
+    {{localize "TOKEN_SLURP.tokenConfig.wildcardActive"}}
+  </label>
+
+  <label class="token-slurp-inline-label">
+    {{localize "TOKEN_SLURP.tokenConfig.thumbMode.label"}}
+  </label>
+  <select name="flags.token-slurp.thumbMode">
+    <option value="auto"  {{#if thumbModeAuto}}selected{{/if}}>
+      {{localize "TOKEN_SLURP.tokenConfig.thumbMode.auto"}}
+    </option>
+    <option value="force" {{#if thumbModeForce}}selected{{/if}}>
+      {{localize "TOKEN_SLURP.tokenConfig.thumbMode.force"}}
+    </option>
+    <option value="lazy"  {{#if thumbModeLazy}}selected{{/if}}>
+      {{localize "TOKEN_SLURP.tokenConfig.thumbMode.lazy"}}
+    </option>
+  </select>
+</div>

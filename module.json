@@ -1,12 +1,12 @@
 {
   "id": "token-slurp",
   "title": "Token Slurp",
-  "version": "0.1",
+  "version": "0.1.0",
   "compatibility": {
     "minimum": "13",
     "verified": "14"
   },
-  "description": "<p>Add multiple token faces without relying on the actor sheet or clunky interface.</p>",
+  "description": "Slurp these tokens up :3",
   "authors": [
     {
       "name": "NotEight",
@@ -16,5 +16,13 @@
   "flags": {
     "canUpload": true
   },
-  "action": "manageModule"
+  "esmodules": ["scripts/main.js"],
+  "styles": ["styles/token-slurp.css"],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ]
 }
