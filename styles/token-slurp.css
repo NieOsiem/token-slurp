@@ -172,8 +172,8 @@
 }
 
 .ts-duration-slider {
-  width: 100px !important;
-  max-width: 100px !important;
+  width: 140px !important;
+  max-width: 140px !important;
   flex-shrink: 0;
 }
 
