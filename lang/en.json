@@ -3,16 +3,16 @@
     "settings": {
       "thumbStoragePath": {
         "name": "Thumbnail Storage Path",
-        "hint": "Path inside your User Data folder where generated thumbnails are saved. Must be writable — do not point this at the modules/ directory. Default: token-slurp/thumbs"
+        "hint": "Default: token-slurp/thumbs"
       },
-      "ui1Cols":       { "name": "Quick Picker: Columns",      "hint": "Number of image columns shown in the HUD inline panel." },
-      "ui1Rows":       { "name": "Quick Picker: Rows",         "hint": "Number of visible rows before the HUD panel scrolls." },
-      "ui1CellWidth":  { "name": "Quick Picker: Cell Width",   "hint": "Width in pixels of each image cell in the HUD inline panel." },
-      "ui1CellHeight": { "name": "Quick Picker: Cell Height",  "hint": "Height in pixels of each image cell in the HUD inline panel." },
-      "ui2CellWidth":  { "name": "Window: Cell Width",         "hint": "Width in pixels of each image cell in the picker window. Columns are filled automatically based on window width." },
+      "ui1Cols":       { "name": "Quick Picker: Columns"},
+      "ui1Rows":       { "name": "Quick Picker: Rows"},
+      "ui1CellWidth":  { "name": "Quick Picker: Cell Width"},
+      "ui1CellHeight": { "name": "Quick Picker: Cell Height"},
+      "ui2CellWidth":  { "name": "Window: Cell Width",         "hint": "Width in pixels of each image cell in the picker window." },
       "ui2CellHeight": { "name": "Window: Cell Height",        "hint": "Height in pixels of each image cell in the picker window." },
-      "ui2DefaultCols":{ "name": "Window: Default Columns",    "hint": "How many cells wide the window starts when first opened. You can resize it freely afterwards." },
-      "ui2DefaultRows":{ "name": "Window: Default Rows",       "hint": "How many cells tall the window starts when first opened. You can resize it freely afterwards." }
+      "ui2DefaultCols":{ "name": "Window: Default Columns",    "hint": "First open column amount" },
+      "ui2DefaultRows":{ "name": "Window: Default Rows",       "hint": "First open row amount" }
     },
     "tokenConfig": {
       "wildcardPath":   "Wildcard Path",
