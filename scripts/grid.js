@@ -27,25 +27,21 @@ export async function buildGridData(tokenDoc) {
 
 /**
  * Switch a token to a new image.
+ * 'none' is a fade with 0 duration
  * @param {TokenDocument} tokenDoc
  * @param {string}        newSrc      — full path to the new image
- * @param {string}        animation   — 'none' | 'fade' | 'swirl' | 'dots'
- * @param {number}        duration    — animation duration in milliseconds
+ * @param {string}        [animation] — 'none' | any TokenAnimationTransition value
+ * @param {number}        [duration]  — animation duration in milliseconds
  * @returns {Promise<void>}
  */
 export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', duration = 800) {
-  const updateData = { 'texture.src': newSrc };
+  const transition = animation === 'none' ? 'fade' : animation;
+  const ms         = animation === 'none' ? 0      : duration;
 
-  if (animation !== 'none') {
-    await tokenDoc.update(updateData, {
-      animation: {
-        transition: animation,
-        duration,
-      },
-    });
-  } else {
-    await tokenDoc.update(updateData);
-  }
+  await tokenDoc.update(
+    { 'texture.src': newSrc },
+    { animation: { transition, duration: ms } },
+  );
 }
 
 /**
@@ -59,7 +55,7 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {string}              opts.currentSrc   — currently active image path
  * @param {number}              opts.cellWidth
  * @param {number}              opts.cellHeight
- * @param {number}              opts.cols         — grid columns
+ * @param {number|null}         opts.cols         — grid columns (null = css auto-fill)
  * @param {function}            opts.onSelect     — async (filePath) => void
  */
 export function renderImageGrid(opts) {
@@ -92,7 +88,6 @@ export function renderImageGrid(opts) {
     cell.title = filePath.split('/').pop();
 
     if (isLazy) {
-      // Placeholder div
       cell.dataset.lazySrc = displayUrl;
       cell.dataset.isVideo = vid ? '1' : '';
       observer.observe(cell);
@@ -110,7 +105,8 @@ export function renderImageGrid(opts) {
   }
 }
 
-// Internal helpers
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
 function _onLazyEntry(entries, obs) {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
@@ -132,14 +128,15 @@ function _onLazyEntry(entries, obs) {
 function _appendMedia(cell, displayUrl, vid) {
   if (!vid) {
     const img = document.createElement('img');
-    img.src   = displayUrl;
+    img.src     = displayUrl;
     img.loading = 'lazy';
     cell.appendChild(img);
     return;
   }
 
+  // Video cells: show a static thumbnail, swap to <video> on hover
   const img   = document.createElement('img');
-  img.src = displayUrl;
+  img.src     = displayUrl;
   img.loading = 'lazy';
   cell.appendChild(img);
 
@@ -148,10 +145,10 @@ function _appendMedia(cell, displayUrl, vid) {
   cell.addEventListener('mouseenter', () => {
     if (videoEl) return;
     videoEl = document.createElement('video');
-    videoEl.src      = cell.dataset.src;
-    videoEl.autoplay = true;
-    videoEl.muted    = true;
-    videoEl.loop     = true;
+    videoEl.src         = cell.dataset.src;
+    videoEl.autoplay    = true;
+    videoEl.muted       = true;
+    videoEl.loop        = true;
     videoEl.playsInline = true;
     videoEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
     cell.appendChild(videoEl);

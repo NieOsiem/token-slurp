@@ -5,14 +5,14 @@
         "name": "Thumbnail Storage Path",
         "hint": "Default: token-slurp/thumbs"
       },
-      "ui1Cols":       { "name": "Quick Picker: Columns"},
-      "ui1Rows":       { "name": "Quick Picker: Rows"},
-      "ui1CellWidth":  { "name": "Quick Picker: Cell Width"},
-      "ui1CellHeight": { "name": "Quick Picker: Cell Height"},
-      "ui2CellWidth":  { "name": "Window: Cell Width",         "hint": "Width in pixels of each image cell in the picker window." },
-      "ui2CellHeight": { "name": "Window: Cell Height",        "hint": "Height in pixels of each image cell in the picker window." },
-      "ui2DefaultCols":{ "name": "Window: Default Columns",    "hint": "First open column amount" },
-      "ui2DefaultRows":{ "name": "Window: Default Rows",       "hint": "First open row amount" }
+      "ui1Cols":       { "name": "Quick Picker: Columns",     "hint": "Number of columns" },
+      "ui1Rows":       { "name": "Quick Picker: Rows",        "hint": "Number of rows" },
+      "ui1CellWidth":  { "name": "Quick Picker: Cell Width",  "hint": "Cell width in pixels" },
+      "ui1CellHeight": { "name": "Quick Picker: Cell Height", "hint": "Cell height in pixels" },
+      "ui2CellWidth":  { "name": "Window: Cell Width",        "hint": "Width in pixels of each image cell in the picker window" },
+      "ui2CellHeight": { "name": "Window: Cell Height",       "hint": "Height in pixels of each image cell in the picker window" },
+      "ui2DefaultCols":{ "name": "Window: Default Columns",   "hint": "Number of columns on first open" },
+      "ui2DefaultRows":{ "name": "Window: Default Rows",      "hint": "Number of rows on first open" }
     },
     "tokenConfig": {
       "wildcardPath":   "Wildcard Path",
@@ -36,10 +36,20 @@
       "duration":  "Duration"
     },
     "animation": {
-      "none":  "None",
-      "fade":  "Fade",
-      "swirl": "Swirl",
-      "dots":  "Dots"
+      "instant":    "Instant",
+      "fade":       "Fade",
+      "crosshatch": "Crosshatch",
+      "dots":       "Dots",
+      "glitch":     "Glitch",
+      "hole":       "Hole",
+      "holeSwirl":  "Hole Swirl",
+      "hologram":   "Hologram",
+      "morph":      "Morph",
+      "swirl":      "Swirl",
+      "waterDrop":  "Water Drop",
+      "waves":      "Waves",
+      "wind":       "Wind",
+      "whiteNoise": "White Noise"
     },
     "notifications": {
       "noImages": "Token Slurp: no images found for this wildcard path."

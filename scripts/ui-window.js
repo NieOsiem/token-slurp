@@ -35,22 +35,26 @@ export function initSlurpWindow() {
       this._pinned     = false;
       this._animation  = 'none';
       this._duration   = 800;
+    }
 
+    /**
+     * Compute the window size from current settings.
+     * Called by openSlurpWindow after render so the live setting values are used.
+     * @returns {{ width: number, height: number }}
+     */
+    _computeInitialSize() {
       const cw   = getSetting(SETTINGS.UI2_CELL_WIDTH);
       const ch   = getSetting(SETTINGS.UI2_CELL_HEIGHT);
       const cols = getSetting(SETTINGS.UI2_DEFAULT_COLS);
       const rows = getSetting(SETTINGS.UI2_DEFAULT_ROWS);
-      this.options.position.width  = cols * cw + 32;
-      this.options.position.height = rows * ch + 90;
+      return {
+        width:  cols * cw + 32,
+        height: rows * ch + 90,
+      };
     }
 
     async _prepareContext(_options) {
-      return {
-        animationOptions: ANIMATION_OPTIONS,
-        animation:        this._animation,
-        duration:         this._duration,
-        pinned:           this._pinned,
-      };
+      return {};
     }
 
     async _onRender(_context, _options) {
@@ -60,7 +64,6 @@ export function initSlurpWindow() {
 
       this._injectHeaderControls(el);
 
-      // Image grid
       const data = await buildGridData(this.tokenDoc);
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
@@ -86,7 +89,7 @@ export function initSlurpWindow() {
         currentSrc: data.currentSrc,
         cellWidth,
         cellHeight,
-        cols:       null,   // css autofill
+        cols:     null,   // css auto-fill
         onSelect: async (filePath) => {
           await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
           if (!this._pinned) this.close();
@@ -94,18 +97,29 @@ export function initSlurpWindow() {
       });
     }
 
-    // Controlls on appv2 header
+    // ── Header controls ───────────────────────────────────────────────────────
+
     _injectHeaderControls(el) {
       const header = el.querySelector('.window-header');
       if (!header || header.querySelector('.ts-header-controls')) return;
 
+      // ── 1. Pin button ────────────────────────────────────────────────────
+      const pinBtn = document.createElement('button');
+      pinBtn.type      = 'button';
+      pinBtn.className = `ts-pin-toggle${this._pinned ? ' ts-pinned' : ''}`;
+      pinBtn.title     = game.i18n.localize('TOKEN_SLURP.window.pin');
+      pinBtn.innerHTML = '<i class="fas fa-thumbtack"></i>';
+      header.prepend(pinBtn);
+
+      pinBtn.addEventListener('click', () => {
+        this._pinned = !this._pinned;
+        pinBtn.classList.toggle('ts-pinned', this._pinned);
+      });
+
+      // ── 2. Animation / duration controls ────────────────────────────────
       const controls = document.createElement('div');
       controls.className = 'ts-header-controls';
       controls.innerHTML = `
-        <button type="button" class="ts-pin-toggle${this._pinned ? ' ts-pinned' : ''}"
-                title="${game.i18n.localize('TOKEN_SLURP.window.pin')}">
-          <i class="fas fa-thumbtack"></i>
-        </button>
         <select class="ts-anim-select" title="${game.i18n.localize('TOKEN_SLURP.window.animation')}">
           ${ANIMATION_OPTIONS.map(o =>
             `<option value="${o.value}"${o.value === this._animation ? ' selected' : ''}>
@@ -119,15 +133,9 @@ export function initSlurpWindow() {
         <span class="ts-duration-label">${this._duration}ms</span>
       `;
 
-      // TODO: fix it inserting after the close button
-      const firstBtn = header.querySelector('.header-button, .close');
-      if (firstBtn) header.insertBefore(controls, firstBtn);
+      const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
+      if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
       else header.appendChild(controls);
-
-      controls.querySelector('.ts-pin-toggle').addEventListener('click', () => {
-        this._pinned = !this._pinned;
-        controls.querySelector('.ts-pin-toggle').classList.toggle('ts-pinned', this._pinned);
-      });
 
       controls.querySelector('.ts-anim-select').addEventListener('change', ev => {
         this._animation = ev.currentTarget.value;
@@ -158,7 +166,10 @@ export async function openSlurpWindow(token) {
     existing.bringToFront();
     return;
   }
+
   const win = new _SlurpWindowClass({ token });
   _SlurpWindowClass._instances.set(id, win);
   await win.render({ force: true });
+
+  win.setPosition(win._computeInitialSize());
 }
