@@ -47,10 +47,26 @@ export function initSlurpWindow() {
       const ch   = getSetting(SETTINGS.UI2_CELL_HEIGHT);
       const cols = getSetting(SETTINGS.UI2_DEFAULT_COLS);
       const rows = getSetting(SETTINGS.UI2_DEFAULT_ROWS);
-      return {
-        width:  cols * cw + 32,
-        height: rows * ch + 90,
-      };
+
+      // Width breakdown:
+      //   cols * cw          → cell content
+      //   (cols-1) * 4       → gaps between cells
+      //   4                  → grid padding (2px each side)
+      //   12                 → .window-content padding (6px each side)
+      //   17                 → vertical scrollbar
+      //   16                 → window chrome / border
+      const width = cols * cw + (cols - 1) * 4 + 4 + 12 + 17 + 16;
+
+      // Height breakdown:
+      //   rows * ch          → cell content
+      //   (rows-1) * 4       → gaps between cells
+      //   4                  → grid padding (2px each side)
+      //   12                 → .window-content padding (6px each side)
+      //   40                 → header bar height
+      //   8                  → window chrome / border
+      const height = rows * ch + (rows - 1) * 4 + 4 + 12 + 40 + 8;
+
+      return { width, height };
     }
 
     async _prepareContext(_options) {
@@ -120,6 +136,10 @@ export function initSlurpWindow() {
       const controls = document.createElement('div');
       controls.className = 'ts-header-controls';
       controls.innerHTML = `
+        <input class="ts-duration-slider" type="range" min="100" max="3000" step="100"
+               value="${this._duration}"
+               title="${game.i18n.localize('TOKEN_SLURP.window.duration')}"/>
+        <span class="ts-duration-label">${this._duration}ms</span>
         <select class="ts-anim-select" title="${game.i18n.localize('TOKEN_SLURP.window.animation')}">
           ${ANIMATION_OPTIONS.map(o =>
             `<option value="${o.value}"${o.value === this._animation ? ' selected' : ''}>
@@ -127,22 +147,29 @@ export function initSlurpWindow() {
             </option>`
           ).join('')}
         </select>
-        <input class="ts-duration-slider" type="range" min="100" max="3000" step="100"
-               value="${this._duration}"
-               title="${game.i18n.localize('TOKEN_SLURP.window.duration')}"/>
-        <span class="ts-duration-label">${this._duration}ms</span>
       `;
 
       const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
       if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
       else header.appendChild(controls);
 
-      controls.querySelector('.ts-anim-select').addEventListener('change', ev => {
-        this._animation = ev.currentTarget.value;
-      });
-
+      const select = controls.querySelector('.ts-anim-select');
       const slider = controls.querySelector('.ts-duration-slider');
       const label  = controls.querySelector('.ts-duration-label');
+
+      const syncSliderVisibility = (value) => {
+        const instant = value === 'none';
+        slider.style.display = instant ? 'none' : '';
+        label.style.display  = instant ? 'none' : '';
+      };
+
+      syncSliderVisibility(this._animation);
+
+      select.addEventListener('change', ev => {
+        this._animation = ev.currentTarget.value;
+        syncSliderVisibility(this._animation);
+      });
+
       slider.addEventListener('input', ev => {
         this._duration = Number(ev.currentTarget.value);
         label.textContent = `${this._duration}ms`;

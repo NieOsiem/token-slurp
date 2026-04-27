@@ -1,4 +1,3 @@
-
 .token-slurp-group {
   flex-wrap: wrap;
   gap: 4px;
@@ -26,7 +25,6 @@
 /* Override Foundry's 100% width default for buttons */
 .token-slurp-controls-row button,
 .token-slurp-browse,
-.ts-pin-toggle,
 .token-slurp-window .window-header button {
   width: auto !important;
   padding: 2px 8px;
@@ -43,6 +41,8 @@
   height: 36px;
   object-fit: contain;
 }
+
+/* ── Image cells ──────────────────────────────────────────────────────────── */
 
 .ts-cell {
   position: relative;
@@ -77,6 +77,7 @@
   pointer-events: none;
 }
 
+/* ── UI1: HUD panel ───────────────────────────────────────────────────────── */
 
 .token-slurp-hud-panel {
   position: fixed;
@@ -99,7 +100,7 @@
   box-sizing: border-box;
 }
 
-/* UI2: ApplicationV2 window */
+/* ── UI2: ApplicationV2 window ────────────────────────────────────────────── */
 
 .token-slurp-window .window-content {
   padding: 6px;
@@ -122,7 +123,8 @@
   min-height: 0;
 }
 
-/* Header buttons */
+/* ── UI2 header layout ────────────────────────────────────────────────────── */
+
 .token-slurp-window .window-header {
   display: flex;
   align-items: center;
@@ -140,35 +142,39 @@
   min-width: 60px;
 }
 
-.ts-header-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.ts-pin-toggle {
+.token-slurp-window .ts-pin-toggle {
+  order: -1;
+  flex-shrink: 0;
+  width: auto !important;
+  padding: 2px 5px !important;
   opacity: 0.5;
   transition: opacity 0.15s, color 0.15s;
-  padding: 2px 5px !important;
-  flex-shrink: 0;
 }
 
-.ts-pin-toggle.ts-pinned {
+.token-slurp-window .ts-pin-toggle.ts-pinned {
   opacity: 1;
   color: var(--color-border-highlight, #ff6400);
 }
 
+.ts-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .ts-anim-select {
-  flex: 1 1 80px;
-  min-width: 0;
+  width: 140px !important;
+  max-width: 140px !important;
+  flex-shrink: 0;
   font-size: 0.8em;
 }
 
 .ts-duration-slider {
-  flex: 2 1 60px;
-  min-width: 40px;
+  width: 100px !important;
+  max-width: 100px !important;
+  flex-shrink: 0;
 }
 
 .ts-duration-label {
@@ -179,7 +185,8 @@
   text-align: right;
 }
 
-/* Empty state */
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
 .ts-empty {
   padding: 12px;
   text-align: center;
