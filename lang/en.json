@@ -80,16 +80,16 @@
     },
     "thumbCleaner": {
       "title":           "Thumbnail Cleaner",
-      "instructions":    "Enter a wildcard path to find and remove its cached thumbnails. Source image files are never affected.",
+      "instructions":    "Enter a wildcard path to find and regenerate its cached thumbnails. Source image files are never modified or overwritten.",
       "pathPlaceholder": "path/*/to/*/Glob*Pattern*",
       "find":            "Find Thumbnails",
       "searching":       "Searching…",
       "noneFound":       "No cached thumbnails found for that path.",
       "error":           "An error occurred while searching. Check the console for details.",
       "found":           "{count} thumbnail(s) found:",
-      "deleteCount":     "Delete {count} thumbnails",
-      "confirmDelete":   "⚠ Click again to confirm deletion",
-      "deleted":         "Deleted {count} thumbnail(s).",
+      "regenCount":      "Regenerate {count} thumbnails",
+      "confirmRegen":    "⚠ Click again to confirm regeneration",
+      "regenerated":     "Regenerated {count} thumbnail(s).",
       "back":            "Back"
     }
   }

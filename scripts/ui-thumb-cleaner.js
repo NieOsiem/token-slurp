@@ -1,6 +1,6 @@
 import { MODULE_ID } from './constants.js';
 import { getSetting, SETTINGS } from './settings.js';
-import { resolveWildcard, thumbPathFor } from './wildcard.js';
+import { resolveWildcard, thumbPathFor, ensureThumb } from './wildcard.js';
 
 export function initThumbCleaner() {
   const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -71,16 +71,16 @@ export function initThumbCleaner() {
         try {
           const storageRoot = getSetting(SETTINGS.THUMB_STORAGE_PATH);
           const files       = await resolveWildcard(rawPath);
-          const thumbPaths  = await _findExistingThumbs(files, storageRoot);
+          const thumbData   = await _findExistingThumbs(files, storageRoot);
 
-          if (!thumbPaths.length) {
+          if (!thumbData.length) {
             statusEl.textContent = game.i18n.localize('TOKEN_SLURP.thumbCleaner.noneFound');
             findBtn.disabled = false;
             return;
           }
 
           statusEl.style.display = 'none';
-          this._showPreviewPhase(el, thumbPaths, storageRoot, searchDiv, previewDiv, () => {
+          this._showPreviewPhase(el, thumbData, storageRoot, searchDiv, previewDiv, () => {
             statusEl.style.display = 'none';
             findBtn.disabled       = false;
           });
@@ -96,17 +96,17 @@ export function initThumbCleaner() {
     // ── Phase 2 — preview & confirm ───────────────────────────────────────────
 
     /**
-     * Transition to the preview phase: show found thumbnails and a two-click delete button.
+     * Transition to the preview phase: show found thumbnails and a two-click regenerate button.
      * Uses an AbortController so all listeners are cleanly removed on Back or close.
      *
      * @param {HTMLElement}  el
-     * @param {string[]}     thumbPaths
+     * @param {{source: string, thumb: string}[]} thumbData  — array of {source file path, thumbnail path}
      * @param {string}       storageRoot
      * @param {HTMLElement}  searchDiv
      * @param {HTMLElement}  previewDiv
      * @param {function}     onBack
      */
-    _showPreviewPhase(el, thumbPaths, storageRoot, searchDiv, previewDiv, onBack) {
+    _showPreviewPhase(el, thumbData, storageRoot, searchDiv, previewDiv, onBack) {
       // Abort any listeners left over from a previous preview visit
       this._previewAbort?.abort();
       const ac     = new AbortController();
@@ -116,25 +116,25 @@ export function initThumbCleaner() {
       const countEl   = previewDiv.querySelector('.ts-cleaner-count');
       const thumbGrid = previewDiv.querySelector('.ts-cleaner-thumb-grid');
       const backBtn   = previewDiv.querySelector('.ts-cleaner-back');
-      const deleteBtn = previewDiv.querySelector('.ts-cleaner-delete');
-      const deleteLbl = previewDiv.querySelector('.ts-cleaner-delete-label');
+      const regenBtn  = previewDiv.querySelector('.ts-cleaner-regen');
+      const regenLbl  = previewDiv.querySelector('.ts-cleaner-regen-label');
 
-      countEl.textContent = game.i18n.format('TOKEN_SLURP.thumbCleaner.found', { count: thumbPaths.length });
+      countEl.textContent = game.i18n.format('TOKEN_SLURP.thumbCleaner.found', { count: thumbData.length });
 
       thumbGrid.innerHTML = '';
-      for (const p of thumbPaths) {
+      for (const item of thumbData) {
         const img     = document.createElement('img');
-        img.src       = p;
-        img.title     = p;
+        img.src       = item.thumb;
+        img.title     = `${item.source} → ${item.thumb}`;
         img.loading   = 'lazy';
         img.className = 'ts-cleaner-thumb-preview';
         thumbGrid.appendChild(img);
       }
 
-      deleteBtn.disabled = false;
-      deleteBtn.classList.remove('ts-delete-confirm');
-      deleteLbl.textContent = game.i18n.format(
-        'TOKEN_SLURP.thumbCleaner.deleteCount', { count: thumbPaths.length }
+      regenBtn.disabled = false;
+      regenBtn.classList.remove('ts-regen-confirm');
+      regenLbl.textContent = game.i18n.format(
+        'TOKEN_SLURP.thumbCleaner.regenCount', { count: thumbData.length }
       );
 
       searchDiv.style.display  = 'none';
@@ -147,21 +147,21 @@ export function initThumbCleaner() {
         onBack();
       }, { signal });
 
-      // Delete — two-click confirmation
+      // Regenerate — two-click confirmation
       let confirmed = false;
-      deleteBtn.addEventListener('click', async () => {
+      regenBtn.addEventListener('click', async () => {
         if (!confirmed) {
           confirmed = true;
-          deleteBtn.classList.add('ts-delete-confirm');
-          deleteLbl.textContent = game.i18n.localize('TOKEN_SLURP.thumbCleaner.confirmDelete');
+          regenBtn.classList.add('ts-regen-confirm');
+          regenLbl.textContent = game.i18n.localize('TOKEN_SLURP.thumbCleaner.confirmRegen');
           return;
         }
 
-        deleteBtn.disabled = true;
+        regenBtn.disabled = true;
         ac.abort();
-        await _deleteThumbs(thumbPaths, storageRoot);
+        await _regenerateThumbs(thumbData, storageRoot);
         ui.notifications.info(
-          game.i18n.format('TOKEN_SLURP.thumbCleaner.deleted', { count: thumbPaths.length })
+          game.i18n.format('TOKEN_SLURP.thumbCleaner.regenerated', { count: thumbData.length })
         );
         this.close();
       }, { signal });
@@ -172,7 +172,7 @@ export function initThumbCleaner() {
     name:       'TOKEN_SLURP.settings.thumbCleaner.name',
     label:      'TOKEN_SLURP.settings.thumbCleaner.label',
     hint:       'TOKEN_SLURP.settings.thumbCleaner.hint',
-    icon:       'fas fa-trash-alt',
+    icon:       'fas fa-sync-alt',
     type:       ThumbCleanerApp,
     restricted: true, // GM only
   });
@@ -181,11 +181,11 @@ export function initThumbCleaner() {
 // ── Module-private helpers ────────────────────────────────────────────────────
 
 /**
- * Find which computed thumb paths actually exist on disk.
+ * Find which computed thumb paths actually exist on disk, and pair them with their source files.
  * Browses the storage root once, builds a Set of filenames, then does hash lookups.
  * @param {string[]} sourceFiles
  * @param {string}   storageRoot
- * @returns {Promise<string[]>}
+ * @returns {Promise<{source: string, thumb: string}[]>}
  */
 async function _findExistingThumbs(sourceFiles, storageRoot) {
   let existingNames;
@@ -198,53 +198,54 @@ async function _findExistingThumbs(sourceFiles, storageRoot) {
   }
 
   return sourceFiles
-    .map(f    => thumbPathFor(f, storageRoot))
-    .filter(p => existingNames.has(p.split('/').pop()));
+    .map(f => ({ source: f, thumb: thumbPathFor(f, storageRoot) }))
+    .filter(item => existingNames.has(item.thumb.split('/').pop()));
 }
 
 /**
- * Delete thumbnail files.
+ * Regenerate thumbnail files from their source images.
  *
- * SAFETY: every path is verified to start with `${storageRoot}/` before deletion.
+ * SAFETY: every thumbnail path is verified to start with `${storageRoot}/` before regeneration.
+ * Source files are NEVER modified or overwritten.
  *
- * @param {string[]} thumbPaths
+ * @param {{source: string, thumb: string}[]} thumbData
  * @param {string}   storageRoot
  */
-async function _deleteThumbs(thumbPaths, storageRoot) {
+async function _regenerateThumbs(thumbData, storageRoot) {
   const safeRoot = storageRoot.replace(/\/+$/, '');
 
   const results = await Promise.allSettled(
-    thumbPaths.map(async (p) => {
-      if (!p.startsWith(`${safeRoot}/`)) {
-        console.error(`[${MODULE_ID}] Thumb cleaner refusing out-of-bounds path: ${p}`);
+    thumbData.map(async (item) => {
+      // Safety check: ensure thumb path is within the expected storage root
+      if (!item.thumb.startsWith(`${safeRoot}/`)) {
+        console.error(`[${MODULE_ID}] Thumb cleaner refusing out-of-bounds path: ${item.thumb}`);
         return;
       }
-      await _deleteFile('data', p);
+
+      // Verify the source file exists before attempting regeneration
+      try {
+        const sourceDir  = item.source.substring(0, item.source.lastIndexOf('/'));
+        const sourceName = item.source.split('/').pop();
+        const result     = await FilePicker.browse('data', sourceDir);
+        const exists     = (result.files ?? []).some(f => f.split('/').pop() === sourceName);
+        if (!exists) {
+          console.warn(`[${MODULE_ID}] Source file not found: ${item.source}`);
+          return;
+        }
+      } catch (err) {
+        console.warn(`[${MODULE_ID}] Could not verify source file ${item.source}:`, err);
+        return;
+      }
+
+      // Regenerate the thumbnail from the source file
+      // Pass force=true to ensureThumb to overwrite existing thumbnails
+      await ensureThumb(item.source, item.thumb, true);
     })
   );
 
   const failures = results.filter(r => r.status === 'rejected');
   if (failures.length) {
-    console.warn(`[${MODULE_ID}] Thumb cleaner: ${failures.length} deletion(s) failed:`);
+    console.warn(`[${MODULE_ID}] Thumb cleaner: ${failures.length} regeneration(s) failed:`);
     failures.forEach(r => console.warn(' >', r.reason));
-  }
-}
-
-/**
- * Delete a single file from Foundry's data storage.
- * @param {string} source  — storage source (always 'data' for user content)
- * @param {string} path    — relative path to the file
- * @returns {Promise<void>}
- * TODO: Fix the deletion mechanism cause it doesn't work and this renders this entire part useless XD
- */
-async function _deleteFile(source, path) {
-  const response = await fetch('/api/filesystems', {
-    method:  'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ storage: source, path }),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `HTTP ${response.status} ${response.statusText}`);
   }
 }

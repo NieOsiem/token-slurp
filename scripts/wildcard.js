@@ -201,17 +201,20 @@ async function ensureDirectory(dirPath) {
 }
 
 // Ensure a thumbnail exists for the given source file.
-// Checks existence via FilePicker.browse, generates and uploads if missing.
+// If force is true, always regenerate even if the thumbnail exists.
 // Falls back to the original path on any error.
-async function ensureThumb(sourcePath, thumbPath) {
+export async function ensureThumb(sourcePath, thumbPath, force = false) {
   const thumbDir  = thumbPath.substring(0, thumbPath.lastIndexOf('/'));
   const thumbName = thumbPath.split('/').pop();
 
+  let exists = false;
   try {
     const result = await FilePicker.browse('data', thumbDir);
-    const exists = (result.files ?? []).some(f => f.split('/').pop() === thumbName);
-    if (exists) return thumbPath;
+    exists = (result.files ?? []).some(f => f.split('/').pop() === thumbName);
   } catch { /* directory doesn't exist yet — fall through to generation */ }
+
+  // If thumbnail exists and we're not forcing regeneration, return early
+  if (exists && !force) return thumbPath;
 
   try {
     const blob = await generateThumbBlob(sourcePath);

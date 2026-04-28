@@ -326,22 +326,22 @@
   padding: 4px 12px;
 }
 
-.ts-cleaner-delete {
+.ts-cleaner-regen {
   padding: 4px 12px;
-  background: var(--color-level-error, #8b0000);
+  background: var(--color-level-success, #2e7d32);
   color: #fff;
-  border: 1px solid darkred;
+  border: 1px solid #1b5e20;
   border-radius: 3px;
   transition: background 0.15s, border-color 0.15s;
 }
 
-.ts-cleaner-delete.ts-delete-confirm {
-  background: #c44;
-  border-color: #c44;
+.ts-cleaner-regen.ts-regen-confirm {
+  background: #4caf50;
+  border-color: #4caf50;
   animation: ts-pulse 0.4s ease-in-out;
 }
 
-.ts-cleaner-delete:disabled {
+.ts-cleaner-regen:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
