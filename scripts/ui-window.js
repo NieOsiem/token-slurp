@@ -161,6 +161,25 @@ export function initSlurpWindow() {
       const slider = controls.querySelector('.ts-duration-slider');
       const label  = controls.querySelector('.ts-duration-label');
 
+      const _stopEvent = (ev) => {
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+      };
+
+      slider.addEventListener('pointerdown', _stopEvent, { capture: true });
+      slider.addEventListener('mousedown', _stopEvent, { capture: true });
+      slider.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
+      slider.addEventListener('dragstart', _stopEvent, { capture: true });
+      slider.addEventListener('selectstart', _stopEvent, { capture: true });
+      slider.style.webkitAppRegion = 'no-drag';
+
+      select.addEventListener('pointerdown', _stopEvent, { capture: true });
+      select.addEventListener('mousedown', _stopEvent, { capture: true });
+      select.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
+      select.addEventListener('dragstart', _stopEvent, { capture: true });
+      select.addEventListener('selectstart', _stopEvent, { capture: true });
+      select.style.webkitAppRegion = 'no-drag';
+
       const syncSliderVisibility = (value) => {
         const instant = value === 'none';
         slider.style.display = instant ? 'none' : '';
