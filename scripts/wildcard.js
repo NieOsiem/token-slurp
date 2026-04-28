@@ -177,7 +177,7 @@ function shouldUseThumb(count, mode) {
  * @param {string} storageRoot
  * @returns {string}
  */
-function thumbPathFor(sourceFile, storageRoot) {
+export function thumbPathFor(sourceFile, storageRoot) {
   const hash = simpleHash(sourceFile);
   const ext  = isVideo(sourceFile) ? 'webp' : 'webp';
   return `${storageRoot}/${hash}.${ext}`;
@@ -243,16 +243,17 @@ async function generateThumbBlob(src) {
 
     const draw = () => {
       try {
+        const thumbSize = getSetting(SETTINGS.THUMB_SIZE);
         const canvas = document.createElement('canvas');
-        canvas.width  = THUMB_SIZE;
-        canvas.height = THUMB_SIZE;
+        canvas.width  = thumbSize;
+        canvas.height = thumbSize;
         const ctx    = canvas.getContext('2d');
         const sw     = isVid ? el.videoWidth  : el.naturalWidth;
         const sh     = isVid ? el.videoHeight : el.naturalHeight;
         const side   = Math.min(sw, sh);
         const ox     = (sw - side) / 2;
         const oy     = (sh - side) / 2;
-        ctx.drawImage(el, ox, oy, side, side, 0, 0, THUMB_SIZE, THUMB_SIZE);
+        ctx.drawImage(el, ox, oy, side, side, 0, 0, thumbSize, thumbSize);
         canvas.toBlob(blob => resolve(blob), 'image/webp', 0.85);
       } catch { resolve(null); }
     };
@@ -261,7 +262,11 @@ async function generateThumbBlob(src) {
       el.preload  = 'metadata';
       el.muted    = true;
       el.src      = src;
-      el.addEventListener('loadeddata', draw, { once: true });
+      // After metadata loads, seek past the first frame to avoid blank frames
+      el.addEventListener('loadedmetadata', () => {
+        el.currentTime = Math.min(0.1, (el.duration || 1) * 0.1);
+      }, { once: true });
+      el.addEventListener('seeked', draw, { once: true });
       el.addEventListener('error', () => resolve(null), { once: true });
       el.load();
     } else {

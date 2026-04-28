@@ -1,0 +1,41 @@
+{{!-- templates/ui-thumb-cleaner.hbs --}}
+<div class="ts-cleaner-root">
+  <div class="ts-cleaner-search">
+    <p class="ts-cleaner-instructions">{{localize "TOKEN_SLURP.thumbCleaner.instructions"}}</p>
+
+    <div class="ts-cleaner-input-row">
+      <input
+        class="ts-cleaner-path"
+        type="text"
+        placeholder="{{localize 'TOKEN_SLURP.thumbCleaner.pathPlaceholder'}}"
+      />
+      <button type="button" class="ts-cleaner-browse">
+        <i class="fas fa-folder-open"></i>
+      </button>
+    </div>
+
+    <button type="button" class="ts-cleaner-find">
+      {{localize "TOKEN_SLURP.thumbCleaner.find"}}
+    </button>
+
+    <p class="ts-cleaner-status" style="display:none;"></p>
+  </div>
+
+  {{!-- Preview phase — hidden until thumbnails are found --}}
+  <div class="ts-cleaner-preview" style="display:none;">
+    <p class="ts-cleaner-count"></p>
+
+    <div class="ts-cleaner-thumb-grid"></div>
+
+    <div class="ts-cleaner-actions">
+      <button type="button" class="ts-cleaner-back">
+        <i class="fas fa-arrow-left"></i>
+        {{localize "TOKEN_SLURP.thumbCleaner.back"}}
+      </button>
+      <button type="button" class="ts-cleaner-delete">
+        <i class="fas fa-trash-alt"></i>
+        <span class="ts-cleaner-delete-label"></span>
+      </button>
+    </div>
+  </div>
+</div>

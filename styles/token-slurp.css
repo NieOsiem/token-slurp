@@ -75,6 +75,9 @@
   object-position: center;
   display: block;
   pointer-events: none;
+  transform:        scale(var(--ts-zoom, 1));
+  transform-origin: var(--ts-zoom-origin, center center);
+  will-change:      transform;
 }
 
 /* ── UI1: HUD panel ───────────────────────────────────────────────────────── */
@@ -192,4 +195,130 @@
   text-align: center;
   color: var(--color-text-dark-secondary, #888);
   font-style: italic;
+}
+/* ╔══════════════════════════════════════════════════════════════════════════╗ */
+/* ║  Thumb Cleaner dialogue                                                 ║ */
+/* ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+.token-slurp-thumb-cleaner .window-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Prevent Foundry's 100% button width override inside the cleaner */
+.token-slurp-thumb-cleaner button {
+  width: auto !important;
+}
+
+.ts-cleaner-instructions {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--color-text-dark-secondary, #aaa);
+}
+
+/* ── Search phase ─────────────────────────────────────────────────────────── */
+
+.ts-cleaner-search {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ts-cleaner-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ts-cleaner-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ts-cleaner-browse {
+  flex-shrink: 0;
+  padding: 4px 8px;
+}
+
+.ts-cleaner-find {
+  align-self: flex-start;
+  padding: 4px 14px;
+}
+
+.ts-cleaner-status {
+  font-style: italic;
+  font-size: 0.85em;
+  margin: 0;
+  color: var(--color-text-dark-secondary, #aaa);
+}
+
+/* ── Preview phase ────────────────────────────────────────────────────────── */
+
+.ts-cleaner-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ts-cleaner-count {
+  margin: 0;
+  font-size: 0.9em;
+}
+
+.ts-cleaner-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-dark, #444);
+  border-radius: 3px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ts-cleaner-thumb-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
+}
+
+.ts-cleaner-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.ts-cleaner-back {
+  padding: 4px 12px;
+}
+
+.ts-cleaner-delete {
+  padding: 4px 12px;
+  background: var(--color-level-error, #8b0000);
+  color: #fff;
+  border: 1px solid darkred;
+  border-radius: 3px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ts-cleaner-delete.ts-delete-confirm {
+  background: #c44;
+  border-color: #c44;
+  animation: ts-pulse 0.4s ease-in-out;
+}
+
+.ts-cleaner-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes ts-pulse {
+  0%   { transform: scale(1);    }
+  50%  { transform: scale(1.04); }
+  100% { transform: scale(1);    }
 }

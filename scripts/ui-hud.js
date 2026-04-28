@@ -43,6 +43,8 @@ export class HudPanel {
     const rows       = getSetting(SETTINGS.UI1_ROWS);
     const cellWidth  = getSetting(SETTINGS.UI1_CELL_WIDTH);
     const cellHeight = getSetting(SETTINGS.UI1_CELL_HEIGHT);
+    const zoom       = getSetting(SETTINGS.UI1_ZOOM);
+    const zoomOrigin = getSetting(SETTINGS.UI1_ZOOM_ORIGIN);
 
     const panel = document.createElement('div');
     panel.id        = `${MODULE_ID}-hud-panel`;
@@ -62,6 +64,8 @@ export class HudPanel {
       cellWidth,
       cellHeight,
       cols,
+      zoom,
+      zoomOrigin,
       onSelect:   async (filePath) => {
         await switchTokenImage(this.tokenDoc, filePath);
         this.destroy();

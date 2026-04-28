@@ -57,25 +57,36 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {number}              opts.cellHeight
  * @param {number|null}         opts.cols         — grid columns (null = css auto-fill)
  * @param {function}            opts.onSelect     — async (filePath) => void
+ * @param {number}              [opts.zoom=1]     — scale factor 1.0–2.0
+ * @param {string}              [opts.zoomOrigin='center center'] — CSS transform-origin
  */
 export function renderImageGrid(opts) {
-  const { container, files, displayMap, currentSrc, cellWidth, cellHeight, cols, onSelect } = opts;
+  const {
+    container, files, displayMap, currentSrc,
+    cellWidth, cellHeight, cols, onSelect,
+    zoom = 1, zoomOrigin = 'center center',
+  } = opts;
 
   container.innerHTML = '';
-  container.style.setProperty('--ts-cell-w', `${cellWidth}px`);
-  container.style.setProperty('--ts-cell-h', `${cellHeight}px`);
+  container.style.setProperty('--ts-cell-w',     `${cellWidth}px`);
+  container.style.setProperty('--ts-cell-h',     `${cellHeight}px`);
+  container.style.setProperty('--ts-zoom',        String(zoom));
+  container.style.setProperty('--ts-zoom-origin', zoomOrigin);
   if (cols !== null) container.style.setProperty('--ts-cols', String(cols));
 
-  let observer = null;
+  // Lazy mode: every display URL equals its source file (no thumbnails generated)
   const isLazy = [...displayMap.values()].every((v, i) => v === files[i]);
 
-  if (isLazy) {
-    observer = new IntersectionObserver(_onLazyEntry, {
-      root:       container,
-      rootMargin: '200px',
-      threshold:  0,
-    });
-  }
+  // Two separate observers, created once and shared across all cells in lazy mode.
+  // imgObserver is one-shot: unobserves after the <img> is created.
+  // vidObserver is continuous: plays when visible, pauses when not.
+  const imgObserver = isLazy ? new IntersectionObserver(_onLazyImgEntry, {
+    root: container, rootMargin: '200px', threshold: 0,
+  }) : null;
+
+  const vidObserver = isLazy ? new IntersectionObserver(_onVideoVisibilityEntry, {
+    root: container, rootMargin: '0px', threshold: 0,
+  }) : null;
 
   for (const filePath of files) {
     const displayUrl = displayMap.get(filePath) ?? filePath;
@@ -83,14 +94,19 @@ export function renderImageGrid(opts) {
     const vid        = isVideo(filePath);
 
     const cell = document.createElement('div');
-    cell.className = `ts-cell${isCurrent ? ' ts-cell--active' : ''}`;
+    cell.className   = `ts-cell${isCurrent ? ' ts-cell--active' : ''}`;
     cell.dataset.src = filePath;
-    cell.title = filePath.split('/').pop();
+    cell.title       = filePath.split('/').pop();
 
     if (isLazy) {
-      cell.dataset.lazySrc = displayUrl;
-      cell.dataset.isVideo = vid ? '1' : '';
-      observer.observe(cell);
+      if (vid) {
+        // Videos: autoplay when entering viewport, pause when leaving
+        vidObserver.observe(cell);
+      } else {
+        // Images: load when approaching the viewport, then unobserve
+        cell.dataset.lazySrc = displayUrl;
+        imgObserver.observe(cell);
+      }
     } else {
       _appendMedia(cell, displayUrl, vid);
     }
@@ -107,16 +123,46 @@ export function renderImageGrid(opts) {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function _onLazyEntry(entries, obs) {
+/** One-shot observer: load image when it approaches the viewport, then stop watching. */
+function _onLazyImgEntry(entries, obs) {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
     const cell = entry.target;
     const src  = cell.dataset.lazySrc;
-    const vid  = cell.dataset.isVideo === '1';
-    if (src && !cell.querySelector('img, video')) {
-      _appendMedia(cell, src, vid);
+    if (src && !cell.querySelector('img')) {
+      const img   = document.createElement('img');
+      img.src     = src;
+      img.loading = 'lazy';
+      cell.appendChild(img);
     }
     obs.unobserve(cell);
+  }
+}
+
+/**
+ * Continuous observer: play video when visible, pause when not.
+ * Creates the <video> element on first entry to defer decoding cost.
+ */
+function _onVideoVisibilityEntry(entries) {
+  for (const entry of entries) {
+    const cell = entry.target;
+    let   vid  = cell.querySelector('video');
+
+    if (entry.isIntersecting) {
+      if (!vid) {
+        vid             = document.createElement('video');
+        vid.src         = cell.dataset.src;
+        vid.muted       = true;
+        vid.loop        = true;
+        vid.playsInline = true;
+        vid.autoplay    = true;
+        cell.appendChild(vid);
+      } else {
+        vid.play().catch(() => {});
+      }
+    } else if (vid) {
+      vid.pause();
+    }
   }
 }
 

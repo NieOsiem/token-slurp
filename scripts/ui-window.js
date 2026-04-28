@@ -1,5 +1,5 @@
 import { MODULE_ID, ANIMATION_OPTIONS } from './constants.js';
-import { getSetting, SETTINGS } from './settings.js';
+import { getSetting, setSetting, SETTINGS } from './settings.js';
 import { buildGridData, switchTokenImage, renderImageGrid } from './grid.js';
 
 let _SlurpWindowClass = null;
@@ -33,8 +33,8 @@ export function initSlurpWindow() {
       this._files      = [];
       this._displayMap = new Map();
       this._pinned     = false;
-      this._animation  = 'none';
-      this._duration   = 800;
+      this._animation  = getSetting(SETTINGS.UI2_ANIMATION);
+      this._duration   = getSetting(SETTINGS.UI2_DURATION);
     }
 
     /**
@@ -77,6 +77,8 @@ export function initSlurpWindow() {
       const el         = this.element;
       const cellWidth  = getSetting(SETTINGS.UI2_CELL_WIDTH);
       const cellHeight = getSetting(SETTINGS.UI2_CELL_HEIGHT);
+      const zoom       = getSetting(SETTINGS.UI2_ZOOM);
+      const zoomOrigin = getSetting(SETTINGS.UI2_ZOOM_ORIGIN);
 
       this._injectHeaderControls(el);
 
@@ -106,6 +108,8 @@ export function initSlurpWindow() {
         cellWidth,
         cellHeight,
         cols:     null,   // css auto-fill
+        zoom,
+        zoomOrigin,
         onSelect: async (filePath) => {
           await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
           if (!this._pinned) this.close();
@@ -167,11 +171,13 @@ export function initSlurpWindow() {
 
       select.addEventListener('change', ev => {
         this._animation = ev.currentTarget.value;
+        setSetting(SETTINGS.UI2_ANIMATION, this._animation);
         syncSliderVisibility(this._animation);
       });
 
       slider.addEventListener('input', ev => {
         this._duration = Number(ev.currentTarget.value);
+        setSetting(SETTINGS.UI2_DURATION, this._duration);
         label.textContent = `${this._duration}ms`;
       });
     }

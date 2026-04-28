@@ -5,14 +5,38 @@
         "name": "Thumbnail Storage Path",
         "hint": "Default: token-slurp/thumbs"
       },
+      "thumbSize": {
+        "name": "Thumbnail Resolution",
+        "hint": "Size of generated thumbnails duh."
+      },
       "ui1Cols":       { "name": "Quick Picker: Columns",     "hint": "Number of columns" },
       "ui1Rows":       { "name": "Quick Picker: Rows",        "hint": "Number of rows" },
       "ui1CellWidth":  { "name": "Quick Picker: Cell Width",  "hint": "Cell width in pixels" },
       "ui1CellHeight": { "name": "Quick Picker: Cell Height", "hint": "Cell height in pixels" },
+      "ui1Zoom":       { "name": "Quick Picker: Zoom Level",  "hint": "Scale factor applied to images inside each cell. Values above 1.0 crop and enlarge." },
+      "ui1ZoomOrigin": { "name": "Quick Picker: Zoom Origin", "hint": "Which part of the image stays centred when zoomed. No visible effect at 1.0." },
       "ui2CellWidth":  { "name": "Window: Cell Width",        "hint": "Width in pixels of each image cell in the picker window" },
       "ui2CellHeight": { "name": "Window: Cell Height",       "hint": "Height in pixels of each image cell in the picker window" },
       "ui2DefaultCols":{ "name": "Window: Default Columns",   "hint": "Number of columns on first open" },
-      "ui2DefaultRows":{ "name": "Window: Default Rows",      "hint": "Number of rows on first open" }
+      "ui2DefaultRows":{ "name": "Window: Default Rows",      "hint": "Number of rows on first open" },
+      "ui2Zoom":       { "name": "Window: Zoom Level",        "hint": "Scale factor applied to images inside each cell. Values above 1.0 crop and enlarge." },
+      "ui2ZoomOrigin": { "name": "Window: Zoom Origin",       "hint": "Which part of the image stays centred when zoomed. No visible effect at 1.0." },
+      "zoomOrigin": {
+        "center":      "Center",
+        "top":         "Top",
+        "bottom":      "Bottom",
+        "left":        "Left",
+        "right":       "Right",
+        "topLeft":     "Top-Left",
+        "topRight":    "Top-Right",
+        "bottomLeft":  "Bottom-Left",
+        "bottomRight": "Bottom-Right"
+      },
+      "thumbCleaner": {
+        "name":  "Clear Thumbnails",
+        "label": "Open Thumbnail Cleaner",
+        "hint":  "Remove cached thumbnails for a wildcard path so they are regenerated on next use."
+      }
     },
     "tokenConfig": {
       "wildcardPath":   "Wildcard Path",
@@ -53,6 +77,20 @@
     },
     "notifications": {
       "noImages": "Token Slurp: no images found for this wildcard path."
+    },
+    "thumbCleaner": {
+      "title":           "Thumbnail Cleaner",
+      "instructions":    "Enter a wildcard path to find and remove its cached thumbnails. Source image files are never affected.",
+      "pathPlaceholder": "path/*/to/*/Glob*Pattern*",
+      "find":            "Find Thumbnails",
+      "searching":       "Searching…",
+      "noneFound":       "No cached thumbnails found for that path.",
+      "error":           "An error occurred while searching. Check the console for details.",
+      "found":           "{count} thumbnail(s) found:",
+      "deleteCount":     "Delete {count} thumbnails",
+      "confirmDelete":   "⚠ Click again to confirm deletion",
+      "deleted":         "Deleted {count} thumbnail(s).",
+      "back":            "Back"
     }
   }
 }

@@ -1,20 +1,20 @@
-
 import { MODULE_ID, FLAGS }         from './constants.js';
 import { registerSettings }         from './settings.js';
 import { registerTokenConfigHooks } from './token-config.js';
 import { registerTokenHudHooks }    from './token-hud.js';
 import { initSlurpWindow }          from './ui-window.js';
-import { resolveWildcard, getResolveCache }   from './wildcard.js';
+import { initThumbCleaner }         from './ui-thumb-cleaner.js';
+import { resolveWildcard, getResolveCache } from './wildcard.js';
 import { API }                      from './api.js';
 
-// init
-// Single init hook, everything requiring foundry globals
+// Single init hook — everything requiring foundry globals
 
 Hooks.once('init', () => {
   registerSettings();
   registerTokenConfigHooks();
   registerTokenHudHooks();
   initSlurpWindow();
+  initThumbCleaner();
   console.log(`${MODULE_ID} | Initialised`);
 });
 
