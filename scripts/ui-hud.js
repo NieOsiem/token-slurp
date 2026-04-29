@@ -2,21 +2,22 @@ import { MODULE_ID } from './constants.js';
 import { getSetting, SETTINGS } from './settings.js';
 import { buildGridData, switchTokenImage, renderImageGrid } from './grid.js';
 
-/**
- * UI1 — lightweight panel on token hud
- */
+//UI1 — lightweight panel on token hud.
 export class HudPanel {
   /** @type {HudPanel|null} Currently visible instance (singleton) */
   static current = null;
 
   /**
    * @param {Token}         token       — canvas Token object
-   * @param {HTMLElement}   anchorEl    — the HUD button element (for positioning)
+   * @param {HTMLElement}   anchorEl    — the HUD button element (used for outside-click detection)
+   * @param {HTMLElement}   hudRoot     — the TokenHUD root element; panel is appended
+   *                                      here so it moves with the canvas automatically
    */
-  constructor(token, anchorEl) {
+  constructor(token, anchorEl, hudRoot) {
     this.token     = token;
     this.tokenDoc  = token.document;
     this.anchorEl  = anchorEl;
+    this.hudRoot   = hudRoot;
     this.el        = null;  // root DOM element, set in render()
     this._onOutsideClick = this._onOutsideClick.bind(this);
   }
@@ -24,11 +25,10 @@ export class HudPanel {
   // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * Build and attach the panel to the DOM.
+   * Build and attach the panel to the HUD root element.
    * @returns {Promise<void>}
    */
   async render() {
-    // Destroy any open panel
     HudPanel.current?.destroy();
     HudPanel.current = this;
 
@@ -53,7 +53,7 @@ export class HudPanel {
     const grid = document.createElement('div');
     grid.className = 'ts-grid-container';
     grid.style.maxHeight = `${rows * cellHeight + 12}px`;
-    grid.style.width     = `${cols * cellWidth  + 12}px`;
+    grid.style.width = `${cols * cellWidth + 12 + 16}px`;
     panel.appendChild(grid);
 
     renderImageGrid({
@@ -72,7 +72,7 @@ export class HudPanel {
       },
     });
 
-    document.body.appendChild(panel);
+    this.hudRoot.appendChild(panel);
     this.el = panel;
     this._positionPanel();
 
@@ -89,15 +89,22 @@ export class HudPanel {
   }
 
   _positionPanel() {
-    if (!this.el || !this.anchorEl) return;
-    const anchor = this.anchorEl.getBoundingClientRect();
-    this.el.style.position = 'fixed';
-    this.el.style.top      = `${anchor.top}px`;
-    this.el.style.left     = `${anchor.right + 4}px`;
-    const panelRect = this.el.getBoundingClientRect();
-    if (panelRect.right > window.innerWidth) {
-      this.el.style.left = `${window.innerWidth - panelRect.width - 8}px`;
+    if (!this.el || !this.hudRoot) return;
+
+    const col = this.hudRoot.querySelector('.col.right');
+    if (!col) return;
+
+    let left = 0;
+    let top  = 0;
+    let node = col;
+    while (node && node !== this.hudRoot) {
+      left += node.offsetLeft;
+      top  += node.offsetTop;
+      node  = node.offsetParent;
     }
+
+    this.el.style.top  = `${top}px`;
+    this.el.style.left = `${left + col.offsetWidth + 4}px`;
   }
 
   _onOutsideClick(ev) {

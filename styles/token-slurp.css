@@ -83,8 +83,8 @@
 /* ── UI1: HUD panel ───────────────────────────────────────────────────────── */
 
 .token-slurp-hud-panel {
-  position: fixed;
-  z-index: 900;
+  position: absolute;
+  z-index: 1;
   background: rgba(0, 0, 0, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 5px;
@@ -101,6 +101,7 @@
   overflow-x: hidden;
   padding: 2px;
   box-sizing: border-box;
+  scrollbar-gutter: stable;
 }
 
 /* ── UI2: ApplicationV2 window ────────────────────────────────────────────── */
@@ -173,7 +174,8 @@
   flex: 0 0 auto;
   margin-left: auto;
   -webkit-app-region: no-drag;
-  }
+}
+
 .token-slurp-window.minimized .ts-header-controls {
   display: none;
 }
@@ -225,6 +227,7 @@
   color: var(--color-text-dark-secondary, #888);
   font-style: italic;
 }
+
 /* ╔══════════════════════════════════════════════════════════════════════════╗ */
 /* ║  Thumb Cleaner dialogue                                                 ║ */
 /* ╚══════════════════════════════════════════════════════════════════════════╝ */

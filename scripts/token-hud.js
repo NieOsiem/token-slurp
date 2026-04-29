@@ -4,6 +4,7 @@ import { openSlurpWindow } from './ui-window.js';
 
 export function registerTokenHudHooks() {
   Hooks.on('renderTokenHUD', _onRenderTokenHUD);
+  Hooks.on('closeTokenHUD', () => HudPanel.current?.destroy());
 }
 
 // ── Render handler ────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ function _onRenderTokenHUD(hud, html, _data) {
       existing.destroy();
       return;
     }
-    const panel = new HudPanel(token, btn1);
+    const panel = new HudPanel(token, btn1, root);
     await panel.render();
   });
 
