@@ -1,7 +1,7 @@
 {
   "id": "token-slurp",
   "title": "Token Slurp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compatibility": {
     "minimum": "13",
     "verified": "14"

@@ -54,10 +54,13 @@
       "openWindow": "Token Slurp — open window"
     },
     "window": {
-      "title":     "Token Slurp",
-      "pin":       "Pin open after selection",
-      "animation": "Transition",
-      "duration":  "Duration"
+      "title":          "Token Slurp",
+      "pin":            "Pin open after selection",
+      "animation":      "Transition",
+      "duration":       "Duration",
+      "loading":        "Loading…",
+      "reloadSelected": "Reload for selected token",
+      "followScene":    "Follow token to active scene"
     },
     "animation": {
       "instant":    "Instant",
@@ -76,7 +79,11 @@
       "whiteNoise": "White Noise"
     },
     "notifications": {
-      "noImages": "Token Slurp: no images found for this wildcard path."
+      "noImages":       "Token Slurp: no images found for this wildcard path.",
+      "noWildcard":     "Token Slurp: the selected token has no active wildcard path.",
+      "followNoActor":  "Token Slurp: current token has no actor or wildcard path to match against.",
+      "followNoMatch":  "Token Slurp: no matching token found in the active scene.",
+      "followMultiple": "Token Slurp: multiple matching tokens found — cannot determine which one to follow."
     },
     "thumbCleaner": {
       "title":           "Thumbnail Cleaner",

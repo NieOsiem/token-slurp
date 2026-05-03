@@ -1,4 +1,4 @@
-import { MODULE_ID, ANIMATION_OPTIONS } from './constants.js';
+import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
 import { buildGridData, switchTokenImage, renderImageGrid } from './grid.js';
 
@@ -48,22 +48,9 @@ export function initSlurpWindow() {
       const cols = getSetting(SETTINGS.UI2_DEFAULT_COLS);
       const rows = getSetting(SETTINGS.UI2_DEFAULT_ROWS);
 
-      // Width breakdown:
-      //   cols * cw          → cell content
-      //   (cols-1) * 4       → gaps between cells
-      //   4                  → grid padding (2px each side)
-      //   12                 → .window-content padding (6px each side)
-      //   17                 → vertical scrollbar
-      //   16                 → window chrome / border
-      const width = cols * cw + (cols - 1) * 4 + 4 + 12 + 17 + 16;
-
-      // Height breakdown:
-      //   rows * ch          → cell content
-      //   (rows-1) * 4       → gaps between cells
-      //   4                  → grid padding (2px each side)
-      //   12                 → .window-content padding (6px each side)
-      //   40                 → header bar height
-      //   8                  → window chrome / border
+      // Width:  cols*cw + (cols-1)*4 gaps + 4 grid-padding + 12 content-padding + 17 scrollbar + 16 chrome
+      const width  = cols * cw + (cols - 1) * 4 + 4 + 12 + 17 + 16;
+      // Height: rows*ch + (rows-1)*4 gaps + 4 grid-padding + 12 content-padding + 40 header + 8 chrome
       const height = rows * ch + (rows - 1) * 4 + 4 + 12 + 40 + 8;
 
       return { width, height };
@@ -74,31 +61,55 @@ export function initSlurpWindow() {
     }
 
     async _onRender(_context, _options) {
-      const el         = this.element;
+      this._injectHeaderControls(this.element);
+      await this._refreshGrid();
+    }
+
+    // ── Grid management ───────────────────────────────────────────────────────
+
+    /**
+     * Re-render the image grid in place, optionally switching to a different token.
+     * Safe to call at any time after the window has been rendered.
+     *
+     * @param {TokenDocument|null} newTokenDoc
+     *   Pass a different TokenDocument to switch the window to that token.
+     *   Pass null (default) to simply refresh the current token's grid.
+     */
+    async _refreshGrid(newTokenDoc = null) {
+      const el = this.element;
+      if (!el) return;
+
+      if (newTokenDoc && newTokenDoc.id !== this.tokenDoc.id) {
+        _SlurpWindowClass._instances.delete(this.tokenDoc.id);
+
+        this.tokenDoc = newTokenDoc;
+        this.token =
+          canvas.tokens?.placeables.find(t => t.document === newTokenDoc)
+          ?? this.token;
+
+        _SlurpWindowClass._instances.set(this.tokenDoc.id, this);
+      }
+
+      const container = el.querySelector('.ts-grid-container');
+      if (!container) return;
+      container.innerHTML =
+        `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`;
+
       const cellWidth  = getSetting(SETTINGS.UI2_CELL_WIDTH);
       const cellHeight = getSetting(SETTINGS.UI2_CELL_HEIGHT);
       const zoom       = getSetting(SETTINGS.UI2_ZOOM);
       const zoomOrigin = getSetting(SETTINGS.UI2_ZOOM_ORIGIN);
 
-      this._injectHeaderControls(el);
-
       const data = await buildGridData(this.tokenDoc);
-      const container = el.querySelector('.ts-grid-container');
-      if (!container) return;
 
       if (!data) {
-        container.insertAdjacentHTML(
-          'afterend',
-          `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`
-        );
+        container.innerHTML =
+          `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`;
         return;
       }
 
       this._files      = data.files;
       this._displayMap = data.displayMap;
-
-      container.style.setProperty('--ts-cell-w', `${cellWidth}px`);
-      container.style.setProperty('--ts-cell-h', `${cellHeight}px`);
 
       renderImageGrid({
         container,
@@ -107,7 +118,7 @@ export function initSlurpWindow() {
         currentSrc: data.currentSrc,
         cellWidth,
         cellHeight,
-        cols:     null,   // css auto-fill
+        cols:       null,   // css auto-fill
         zoom,
         zoomOrigin,
         onSelect: async (filePath) => {
@@ -123,7 +134,6 @@ export function initSlurpWindow() {
       const header = el.querySelector('.window-header');
       if (!header || header.querySelector('.ts-header-controls')) return;
 
-      // ── 1. Pin button ────────────────────────────────────────────────────
       const pinBtn = document.createElement('button');
       pinBtn.type      = 'button';
       pinBtn.className = `ts-pin-toggle${this._pinned ? ' ts-pinned' : ''}`;
@@ -136,9 +146,68 @@ export function initSlurpWindow() {
         pinBtn.classList.toggle('ts-pinned', this._pinned);
       });
 
-      // ── 2. Animation / duration controls ────────────────────────────────
       const controls = document.createElement('div');
       controls.className = 'ts-header-controls';
+
+      const reloadBtn = document.createElement('button');
+      reloadBtn.type      = 'button';
+      reloadBtn.className = 'ts-reload-btn';
+      reloadBtn.title     = game.i18n.localize('TOKEN_SLURP.window.reloadSelected');
+      reloadBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+
+      reloadBtn.addEventListener('click', async () => {
+        const controlled = canvas.tokens?.controlled ?? [];
+        const targetDoc  = controlled.length === 1
+          ? controlled[0].document
+          : this.tokenDoc;
+
+        const flags = targetDoc.flags?.[MODULE_ID] ?? {};
+        if (!flags[FLAGS.WILDCARD_ACTIVE] || !flags[FLAGS.WILDCARD_PATH]) {
+          ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.noWildcard'));
+          return;
+        }
+
+        await this._refreshGrid(targetDoc);
+      });
+
+      const followBtn = document.createElement('button');
+      followBtn.type      = 'button';
+      followBtn.className = 'ts-follow-btn';
+      followBtn.title     = game.i18n.localize('TOKEN_SLURP.window.followScene');
+      followBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+
+      followBtn.addEventListener('click', async () => {
+        const myActorId = this.tokenDoc.actor?.id;
+        const myPath    = this.tokenDoc.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH];
+
+        if (!myActorId || !myPath) {
+          ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.followNoActor'));
+          return;
+        }
+
+        const matches = (canvas.scene?.tokens ?? []).filter(td => {
+          if (td.id === this.tokenDoc.id) return false;
+          const sameActor = td.actor?.id === myActorId;
+          const samePath  =
+            td.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH] === myPath;
+          return sameActor && samePath;
+        });
+
+        if (matches.length === 0) {
+          ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.followNoMatch'));
+          return;
+        }
+        if (matches.length > 1) {
+          ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.followMultiple'));
+          return;
+        }
+
+        await this._refreshGrid(matches[0]);
+      });
+
+      const sep = document.createElement('span');
+      sep.className = 'ts-controls-sep';
+
       controls.innerHTML = `
         <input class="ts-duration-slider" type="range" min="100" max="3000" step="100"
                value="${this._duration}"
@@ -153,6 +222,8 @@ export function initSlurpWindow() {
         </select>
       `;
 
+      controls.prepend(sep, followBtn, reloadBtn);
+
       const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
       if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
       else header.appendChild(controls);
@@ -166,19 +237,14 @@ export function initSlurpWindow() {
         ev.stopImmediatePropagation();
       };
 
-      slider.addEventListener('pointerdown', _stopEvent, { capture: true });
-      slider.addEventListener('mousedown', _stopEvent, { capture: true });
-      slider.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
-      slider.addEventListener('dragstart', _stopEvent, { capture: true });
-      slider.addEventListener('selectstart', _stopEvent, { capture: true });
-      slider.style.webkitAppRegion = 'no-drag';
-
-      select.addEventListener('pointerdown', _stopEvent, { capture: true });
-      select.addEventListener('mousedown', _stopEvent, { capture: true });
-      select.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
-      select.addEventListener('dragstart', _stopEvent, { capture: true });
-      select.addEventListener('selectstart', _stopEvent, { capture: true });
-      select.style.webkitAppRegion = 'no-drag';
+      for (const el of [slider, select, reloadBtn, followBtn]) {
+        el.addEventListener('pointerdown',  _stopEvent, { capture: true });
+        el.addEventListener('mousedown',    _stopEvent, { capture: true });
+        el.addEventListener('touchstart',   _stopEvent, { passive: false, capture: true });
+        el.addEventListener('dragstart',    _stopEvent, { capture: true });
+        el.addEventListener('selectstart',  _stopEvent, { capture: true });
+        el.style.webkitAppRegion = 'no-drag';
+      }
 
       const syncSliderVisibility = (value) => {
         const instant = value === 'none';

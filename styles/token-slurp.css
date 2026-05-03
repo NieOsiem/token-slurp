@@ -354,3 +354,21 @@
   50%  { transform: scale(1.04); }
   100% { transform: scale(1);    }
 }
+
+.ts-controls-sep {
+  display: inline-block;
+  width: 1px;
+  height: 1.2em;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 2px;
+}
+ 
+.ts-reload-btn,
+.ts-follow-btn {
+  flex-shrink: 0;
+  padding: 2px 6px !important;
+  -webkit-user-drag: none;
+  -webkit-app-region: no-drag;
+}
