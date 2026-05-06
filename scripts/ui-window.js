@@ -37,6 +37,17 @@ export function initSlurpWindow() {
       this._duration   = getSetting(SETTINGS.UI2_DURATION);
     }
 
+    get title() {
+      const base = game.i18n.localize('TOKEN_SLURP.window.title');
+      const name = this.tokenDoc?.name;
+      return name ? `${name} \u2014 ${base}` : base;
+    }
+
+    _syncTitle() {
+      const el = this.element?.querySelector('.window-title');
+      if (el) el.textContent = this.title;
+    }
+
     /**
      * Compute the window size from current settings.
      * Called by openSlurpWindow after render so the live setting values are used.
@@ -89,6 +100,8 @@ export function initSlurpWindow() {
 
         _SlurpWindowClass._instances.set(this.tokenDoc.id, this);
       }
+
+      this._syncTitle();
 
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
