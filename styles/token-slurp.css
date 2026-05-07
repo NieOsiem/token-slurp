@@ -1,29 +1,13 @@
 .token-slurp-group {
-  flex-wrap: wrap;
   gap: 4px;
 }
-
-.token-slurp-controls-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.token-slurp-controls-row .token-slurp-inline-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.token-slurp-controls-row select {
-  flex: 1;
-  min-width: 90px;
+.token-slurp-controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 1rem;
 }
 
 /* Override Foundry's 100% width default for buttons */
-.token-slurp-controls-row button,
 .token-slurp-browse,
 .token-slurp-window .window-header button {
   width: auto !important;

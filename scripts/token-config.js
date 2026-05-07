@@ -50,7 +50,8 @@ async function _onRenderTokenConfig(app, html, _data) {
   }
 
   const imageInput   = root.querySelector('[name="texture.src"]');
-  const insertTarget = imageInput?.closest('.form-group');
+  const insertTarget = imageInput?.closest('.token-image-group')
+                    ?? imageInput?.closest('.form-group');
 
   if (insertTarget) {
     insertTarget.after(fragment);

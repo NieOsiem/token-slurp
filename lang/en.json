@@ -44,9 +44,9 @@
       "browse":         "Browse to a file (then add wildcards manually)",
       "thumbMode": {
         "label": "Thumb Mode",
-        "auto":  "Thumbnails (auto)",
-        "force": "Thumbnails (always)",
-        "lazy":  "Lazy load (no thumbs)"
+        "auto":  "Auto",
+        "force": "Always",
+        "lazy":  "Lazy load"
       }
     },
     "hud": {
