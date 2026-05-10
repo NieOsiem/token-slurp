@@ -329,24 +329,14 @@ export function parseFilenameMetadata(filepath) {
     if (idx === -1) continue;
 
     const valueStart = idx + marker.length;
-    let   valueEnd   = stem.length;
+    
+    let valueEnd = stem.indexOf('_', valueStart);
 
-    // Check if there is another known metadata key ahead
-    for (const other of FILENAME_META_KEYS) {
-      if (other === key) continue;
-      const otherIdx = stemLower.indexOf(`_${other}_`, valueStart);
-      if (otherIdx !== -1 && otherIdx < valueEnd) valueEnd = otherIdx;
+    if (valueEnd === -1) {
+      valueEnd = stem.length;
     }
 
-    // If no other key is found, end the value at the next underscore
-    if (valueEnd === stem.length) {
-      const nextUnderscore = stem.indexOf('_', valueStart);
-      if (nextUnderscore !== -1) {
-        valueEnd = nextUnderscore;
-      }
-    }
-
-    const value = stem.slice(valueStart, valueEnd).replace(/_+$/, '').trim();
+    const value = stem.slice(valueStart, valueEnd).trim();
     if (value) meta[key] = value;
   }
 
