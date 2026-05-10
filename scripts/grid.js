@@ -1,5 +1,5 @@
 import { MODULE_ID } from './constants.js';
-import { resolveWildcard, resolveDisplayUrls, isVideo } from './wildcard.js';
+import { resolveWildcard, resolveDisplayUrls, isVideo, parseFilenameMetadata } from './wildcard.js';
 import { FLAGS } from './constants.js';
 
 /**
@@ -26,10 +26,57 @@ export async function buildGridData(tokenDoc) {
 }
 
 /**
- * Switch a token to a new image.
- * 'none' is a fade with 0 duration
+ * (`_name_Sir Roland_`, `_size_2_`, `_scale_1.5_`)
+ *
  * @param {TokenDocument} tokenDoc
- * @param {string}        newSrc      — full path to the new image
+ * @param {string}        newSrc
+ * @returns {object}  Plain update object (no animation options)
+ */
+export function buildTokenImageUpdate(tokenDoc, newSrc) {
+  const newMeta  = parseFilenameMetadata(newSrc);
+  const prevMeta = parseFilenameMetadata(tokenDoc.texture?.src ?? '');
+  const proto    = tokenDoc.actor?.prototypeToken;
+  const data     = { 'texture.src': newSrc };
+
+  // ── Token name ──────────────────────────────────────────────────────────────
+  if ('name' in newMeta) {
+    data.name = newMeta.name;
+  } else if ('name' in prevMeta && proto !== undefined) {
+    data.name = proto.name ?? tokenDoc.name;
+  }
+
+  // ── Token size (square grid units) ─────────────────────────────────────────
+  if ('size' in newMeta) {
+    const size = parseFloat(newMeta.size);
+    if (!isNaN(size) && size > 0) {
+      data.width  = size;
+      data.height = size;
+    }
+  } else if ('size' in prevMeta && proto !== undefined) {
+    data.width  = proto.width  ?? 1;
+    data.height = proto.height ?? 1;
+  }
+
+  // ── Token scale (texture ratio) ─────────────────────────────────────────────
+  if ('scale' in newMeta) {
+    const scale = parseFloat(newMeta.scale);
+    if (!isNaN(scale) && scale > 0) {
+      data['texture.scaleX'] = scale;
+      data['texture.scaleY'] = scale;
+    }
+  } else if ('scale' in prevMeta && proto !== undefined) {
+    data['texture.scaleX'] = proto.texture?.scaleX ?? 1;
+    data['texture.scaleY'] = proto.texture?.scaleY ?? 1;
+  }
+
+  return data;
+}
+
+/**
+ * Switch a token to a new image, applying any metadata encoded in the filename.
+ * 'none' animation is a fade with 0 duration.
+ * @param {TokenDocument} tokenDoc
+ * @param {string}        newSrc
  * @param {string}        [animation] — 'none' | any TokenAnimationTransition value
  * @param {number}        [duration]  — animation duration in milliseconds
  * @returns {Promise<void>}
@@ -39,7 +86,7 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
   const ms         = animation === 'none' ? 0      : duration;
 
   await tokenDoc.update(
-    { 'texture.src': newSrc },
+    buildTokenImageUpdate(tokenDoc, newSrc),
     { animation: { transition, duration: ms } },
   );
 }
@@ -59,12 +106,14 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {function}            opts.onSelect     — async (filePath) => void
  * @param {number}              [opts.zoom=1]     — scale factor 1.0–2.0
  * @param {string}              [opts.zoomOrigin='center center'] — CSS transform-origin
+ * @param {boolean}             [opts.showMetaOverlay=false] — overlay name/size/scale badge on cells that have metadata
  */
 export function renderImageGrid(opts) {
   const {
     container, files, displayMap, currentSrc,
     cellWidth, cellHeight, cols, onSelect,
     zoom = 1, zoomOrigin = 'center center',
+    showMetaOverlay = false,
   } = opts;
 
   container.innerHTML = '';
@@ -100,16 +149,16 @@ export function renderImageGrid(opts) {
 
     if (isLazy) {
       if (vid) {
-        // Videos: autoplay when entering viewport, pause when leaving
         vidObserver.observe(cell);
       } else {
-        // Images: load when approaching the viewport, then unobserve
         cell.dataset.lazySrc = displayUrl;
         imgObserver.observe(cell);
       }
     } else {
       _appendMedia(cell, displayUrl, vid);
     }
+
+    if (showMetaOverlay) _appendMetaOverlay(cell, filePath);
 
     cell.addEventListener('click', async () => {
       container.querySelectorAll('.ts-cell--active').forEach(c => c.classList.remove('ts-cell--active'));
@@ -164,6 +213,31 @@ function _onVideoVisibilityEntry(entries) {
       vid.pause();
     }
   }
+}
+
+/**
+ * @param {HTMLElement} cell
+ * @param {string}      filePath
+ */
+function _appendMetaOverlay(cell, filePath) {
+  const meta = parseFilenameMetadata(filePath);
+  if (!Object.keys(meta).length) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ts-cell-meta';
+
+  if ('name'  in meta) overlay.append(_metaLine(`Name: ${meta.name}`));
+  if ('size'  in meta) overlay.append(_metaLine(`Size: ${meta.size}`));
+  if ('scale' in meta) overlay.append(_metaLine(`Scale: ${meta.scale}`));
+
+  cell.appendChild(overlay);
+}
+
+/** @param {string} text @returns {HTMLElement} */
+function _metaLine(text) {
+  const span = document.createElement('span');
+  span.textContent = text;
+  return span;
 }
 
 /**

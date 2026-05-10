@@ -36,6 +36,10 @@
         "name":  "Clear Thumbnails",
         "label": "Open Thumbnail Cleaner",
         "hint":  "Remove cached thumbnails for a wildcard path so they are regenerated on next use."
+      },
+      "ui2ShowMetaOverlay": {
+        "name": "Window: Show Metadata Overlay",
+        "hint": "Display a small badge on image cells (name, size, scale)."
       }
     },
     "tokenConfig": {

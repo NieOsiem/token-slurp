@@ -11,14 +11,15 @@ export const SETTINGS = {
   UI1_ZOOM:        'ui1Zoom',
   UI1_ZOOM_ORIGIN: 'ui1ZoomOrigin',
   // UI2 — resizeable app
-  UI2_CELL_WIDTH:   'ui2CellWidth',
-  UI2_CELL_HEIGHT:  'ui2CellHeight',
-  UI2_DEFAULT_COLS: 'ui2DefaultCols',
-  UI2_DEFAULT_ROWS: 'ui2DefaultRows',
-  UI2_ZOOM:         'ui2Zoom',
-  UI2_ZOOM_ORIGIN:  'ui2ZoomOrigin',
-  UI2_ANIMATION: 'ui2Animation',
-  UI2_DURATION:  'ui2Duration',
+  UI2_CELL_WIDTH:        'ui2CellWidth',
+  UI2_CELL_HEIGHT:       'ui2CellHeight',
+  UI2_DEFAULT_COLS:      'ui2DefaultCols',
+  UI2_DEFAULT_ROWS:      'ui2DefaultRows',
+  UI2_ZOOM:              'ui2Zoom',
+  UI2_ZOOM_ORIGIN:       'ui2ZoomOrigin',
+  UI2_ANIMATION:         'ui2Animation',
+  UI2_DURATION:          'ui2Duration',
+  UI2_SHOW_META_OVERLAY: 'ui2ShowMetaOverlay',
 };
 
 export function registerSettings() {
@@ -100,6 +101,15 @@ export function registerSettings() {
   clientNum(SETTINGS.UI2_DEFAULT_ROWS, 'TOKEN_SLURP.settings.ui2DefaultRows.name', 'TOKEN_SLURP.settings.ui2DefaultRows.hint',  3,   1,  20);
   clientNum(SETTINGS.UI2_ZOOM,         'TOKEN_SLURP.settings.ui2Zoom.name',        'TOKEN_SLURP.settings.ui2Zoom.hint',        1.0, 1.0, 2.0, 0.1);
   clientZoomOrigin(SETTINGS.UI2_ZOOM_ORIGIN, 'TOKEN_SLURP.settings.ui2ZoomOrigin.name', 'TOKEN_SLURP.settings.ui2ZoomOrigin.hint');
+
+  game.settings.register(MODULE_ID, SETTINGS.UI2_SHOW_META_OVERLAY, {
+    name:    'TOKEN_SLURP.settings.ui2ShowMetaOverlay.name',
+    hint:    'TOKEN_SLURP.settings.ui2ShowMetaOverlay.hint',
+    scope:   'client',
+    config:  true,
+    type:    Boolean,
+    default: true,
+  });
 
   // ── Hidden persisted state — not shown in settings UI ────────────────────
   game.settings.register(MODULE_ID, SETTINGS.UI2_ANIMATION, {

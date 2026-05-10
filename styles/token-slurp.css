@@ -356,3 +356,32 @@
   -webkit-user-drag: none;
   -webkit-app-region: no-drag;
 }
+
+
+/* ── Cell metadata overlay ───────────────────────────────────────────────── */
+ 
+.ts-cell-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 2px 3px;
+  gap: 1px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72) 40%);
+  pointer-events: none;
+}
+ 
+.ts-cell-meta span {
+  font-size: 11px;
+  line-height: 1.2;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+

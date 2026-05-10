@@ -296,3 +296,51 @@ function simpleHash(str) {
 export function isVideo(path) {
   return /\.(webm|mp4|ogg)$/i.test(path);
 }
+
+// ── Filename metadata parsing ─────────────────────────────────────────────────
+
+/**
+ * Ordered list of metadata keys recognised in filenames.
+ * @type {readonly string[]}
+ */
+const FILENAME_META_KEYS = Object.freeze(['name', 'size', 'scale']);
+
+/**
+ * Parse metadata encoded in a filename using the `_key_value_` convention.
+ *
+ * Examples:
+ *   "knight_name_Sir Roland_size_2_scale_1.5_.webp" → { name: 'Sir Roland', size: '2', scale: '1.5' }
+ *   "goblin_scale_0.8_.webp"                        → { scale: '0.8' }
+ *   "generic_token.webp"                            → {}
+ *
+ * @param {string} filepath
+ * @returns {{ name?: string, size?: string, scale?: string }}
+ */
+export function parseFilenameMetadata(filepath) {
+  if (!filepath) return {};
+
+  const stem      = filepath.split('/').pop().replace(/\.[^.]+$/, '');
+  const stemLower = stem.toLowerCase();
+  const meta      = {};
+
+  for (const key of FILENAME_META_KEYS) {
+    const marker = `_${key}_`;
+    const idx    = stemLower.indexOf(marker);
+    if (idx === -1) continue;
+
+    const valueStart = idx + marker.length;
+    let   valueEnd   = stem.length;
+
+    // Value ends at whichever other key marker comes first (or end of stem)
+    for (const other of FILENAME_META_KEYS) {
+      if (other === key) continue;
+      const otherIdx = stemLower.indexOf(`_${other}_`, valueStart);
+      if (otherIdx !== -1 && otherIdx < valueEnd) valueEnd = otherIdx;
+    }
+
+    const value = stem.slice(valueStart, valueEnd).replace(/_+$/, '').trim();
+    if (value) meta[key] = value;
+  }
+
+  return meta;
+}

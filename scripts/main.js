@@ -5,7 +5,8 @@ import { registerTokenHudHooks }    from './token-hud.js';
 import { initSlurpWindow }          from './ui-window.js';
 import { initThumbCleaner }         from './ui-thumb-cleaner.js';
 import { resolveWildcard, getResolveCache } from './wildcard.js';
-import { API }                      from './api.js';
+import { buildTokenImageUpdate }            from './grid.js';
+import { API }                              from './api.js';
 
 // Single init hook — everything requiring foundry globals
 
@@ -41,7 +42,7 @@ Hooks.on('preCreateToken', (tokenDoc, _createData, _options, _userId) => {
   if (cached && cached.length) {
     const chosen = cached[Math.floor(Math.random() * cached.length)];
     tokenDoc.updateSource({
-      'texture.src': chosen,
+      ...buildTokenImageUpdate(tokenDoc, chosen),
       [`flags.${MODULE_ID}.${FLAGS.RANDOMIZED}`]: true,
     });
   } else {
@@ -72,8 +73,8 @@ Hooks.on('createToken', async (tokenDoc, _options, _userId) => {
 
   const chosen = files[Math.floor(Math.random() * files.length)];
   await tokenDoc.update({
-    'texture.src': chosen,
-    [`flags.${MODULE_ID}.${FLAGS.RANDOMIZED}`]:      true,
-    [`flags.${MODULE_ID}._pendingRandomize`]:         false,
+    ...buildTokenImageUpdate(tokenDoc, chosen),
+    [`flags.${MODULE_ID}.${FLAGS.RANDOMIZED}`]: true,
+    [`flags.${MODULE_ID}._pendingRandomize`]:   false,
   });
 });

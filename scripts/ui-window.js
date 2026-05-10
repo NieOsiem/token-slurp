@@ -28,13 +28,15 @@ export function initSlurpWindow() {
 
     constructor({ token }) {
       super();
-      this.token       = token;
-      this.tokenDoc    = token.document;
-      this._files      = [];
-      this._displayMap = new Map();
-      this._pinned     = false;
-      this._animation  = getSetting(SETTINGS.UI2_ANIMATION);
-      this._duration   = getSetting(SETTINGS.UI2_DURATION);
+      this.token               = token;
+      this.tokenDoc            = token.document;
+      this._files              = [];
+      this._displayMap         = new Map();
+      this._pinned             = false;
+      this._animation          = getSetting(SETTINGS.UI2_ANIMATION);
+      this._duration           = getSetting(SETTINGS.UI2_DURATION);
+      this._tokenUpdateHookId  = null;  // Hooks.on ID for auto-refresh
+      this._refreshTimeout     = null;  // debounce handle
     }
 
     get title() {
@@ -74,6 +76,7 @@ export function initSlurpWindow() {
     async _onRender(_context, _options) {
       this._injectHeaderControls(this.element);
       await this._refreshGrid();
+      this._registerUpdateHook();
     }
 
     // ── Grid management ───────────────────────────────────────────────────────
@@ -108,10 +111,11 @@ export function initSlurpWindow() {
       container.innerHTML =
         `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`;
 
-      const cellWidth  = getSetting(SETTINGS.UI2_CELL_WIDTH);
-      const cellHeight = getSetting(SETTINGS.UI2_CELL_HEIGHT);
-      const zoom       = getSetting(SETTINGS.UI2_ZOOM);
-      const zoomOrigin = getSetting(SETTINGS.UI2_ZOOM_ORIGIN);
+      const cellWidth       = getSetting(SETTINGS.UI2_CELL_WIDTH);
+      const cellHeight      = getSetting(SETTINGS.UI2_CELL_HEIGHT);
+      const zoom            = getSetting(SETTINGS.UI2_ZOOM);
+      const zoomOrigin      = getSetting(SETTINGS.UI2_ZOOM_ORIGIN);
+      const showMetaOverlay = getSetting(SETTINGS.UI2_SHOW_META_OVERLAY);
 
       const data = await buildGridData(this.tokenDoc);
 
@@ -134,11 +138,47 @@ export function initSlurpWindow() {
         cols:       null,   // css auto-fill
         zoom,
         zoomOrigin,
+        showMetaOverlay,
         onSelect: async (filePath) => {
           await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
           if (!this._pinned) this.close();
         },
       });
+    }
+
+    // ── Token update reactions ────────────────────────────────────────────────
+
+    _registerUpdateHook() {
+      if (this._tokenUpdateHookId !== null) return;
+
+      this._tokenUpdateHookId = Hooks.on('updateToken', (tokenDoc, changes) => {
+        if (tokenDoc.id !== this.tokenDoc.id) return;
+
+        const flagChanges = changes.flags?.[MODULE_ID];
+        if (flagChanges &&
+            (FLAGS.WILDCARD_PATH in flagChanges || FLAGS.WILDCARD_ACTIVE in flagChanges)) {
+          clearTimeout(this._refreshTimeout);
+          this._refreshTimeout = setTimeout(() => this._refreshGrid(), 100);
+          return;
+        }
+
+        if ('name' in changes) this._syncTitle();
+
+        if (changes.texture?.src) this._syncActiveCell(changes.texture.src);
+      });
+    }
+
+    /**
+     * Move the active-cell highlight to match `src` without rebuilding the grid.
+     * @param {string} src
+     */
+    _syncActiveCell(src) {
+      const container = this.element?.querySelector('.ts-grid-container');
+      if (!container) return;
+      container.querySelectorAll('.ts-cell--active')
+               .forEach(c => c.classList.remove('ts-cell--active'));
+      container.querySelector(`.ts-cell[data-src="${CSS.escape(src)}"]`)
+               ?.classList.add('ts-cell--active');
     }
 
     // ── Header controls ───────────────────────────────────────────────────────
@@ -282,6 +322,12 @@ export function initSlurpWindow() {
 
     async _onClose(_options) {
       _SlurpWindowClass._instances.delete(this.tokenDoc.id);
+
+      if (this._tokenUpdateHookId !== null) {
+        Hooks.off('updateToken', this._tokenUpdateHookId);
+        this._tokenUpdateHookId = null;
+      }
+      clearTimeout(this._refreshTimeout);
     }
   };
 }
