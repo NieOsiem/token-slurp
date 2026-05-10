@@ -331,11 +331,19 @@ export function parseFilenameMetadata(filepath) {
     const valueStart = idx + marker.length;
     let   valueEnd   = stem.length;
 
-    // Value ends at whichever other key marker comes first (or end of stem)
+    // Check if there is another known metadata key ahead
     for (const other of FILENAME_META_KEYS) {
       if (other === key) continue;
       const otherIdx = stemLower.indexOf(`_${other}_`, valueStart);
       if (otherIdx !== -1 && otherIdx < valueEnd) valueEnd = otherIdx;
+    }
+
+    // If no other key is found, end the value at the next underscore
+    if (valueEnd === stem.length) {
+      const nextUnderscore = stem.indexOf('_', valueStart);
+      if (nextUnderscore !== -1) {
+        valueEnd = nextUnderscore;
+      }
     }
 
     const value = stem.slice(valueStart, valueEnd).replace(/_+$/, '').trim();
