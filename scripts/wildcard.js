@@ -307,11 +307,8 @@ const FILENAME_META_KEYS = Object.freeze(['name', 'size', 'scale']);
 
 /**
  * Parse metadata encoded in a filename using the `_key_value_` convention.
- *
- * Examples:
- *   "knight_name_Sir Roland_size_2_scale_1.5_.webp" → { name: 'Sir Roland', size: '2', scale: '1.5' }
- *   "goblin_scale_0.8_.webp"                        → { scale: '0.8' }
- *   "generic_token.webp"                            → {}
+ * Handles URL-encoded characters (like %20 for spaces) and prevents 
+ * trailing variant numbers (like _01) from being captured into values.
  *
  * @param {string} filepath
  * @returns {{ name?: string, size?: string, scale?: string }}
@@ -319,7 +316,16 @@ const FILENAME_META_KEYS = Object.freeze(['name', 'size', 'scale']);
 export function parseFilenameMetadata(filepath) {
   if (!filepath) return {};
 
-  const stem      = filepath.split('/').pop().replace(/\.[^.]+$/, '');
+  let filename = filepath.split('/').pop();
+
+  try {
+    filename = decodeURIComponent(filename);
+  } catch (e) {
+    // If decoding fails due to a malformed path, we proceed with the raw name
+    console.warn(`Could not decode filename: ${filename}`, e);
+  }
+
+  const stem      = filename.replace(/\.[^.]+$/, '');
   const stemLower = stem.toLowerCase();
   const meta      = {};
 
@@ -331,7 +337,6 @@ export function parseFilenameMetadata(filepath) {
     const valueStart = idx + marker.length;
     
     let valueEnd = stem.indexOf('_', valueStart);
-
     if (valueEnd === -1) {
       valueEnd = stem.length;
     }
