@@ -131,7 +131,7 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {string}              [opts.zoomOrigin='center center'] — CSS transform-origin
  * @param {boolean}             [opts.showMetaOverlay=false] — overlay name/size/scale badge on cells
  * @returns {{ updateCellDisplay: (filePath: string, url: string) => void }}
- *   Call updateCellDisplay to swap a loading placeholder for a real image at any time after render.
+ * Call updateCellDisplay to swap a loading placeholder for a real image at any time after render.
  */
 export function renderImageGrid(opts) {
   const {
@@ -195,6 +195,25 @@ export function renderImageGrid(opts) {
     }
 
     if (showMetaOverlay) _appendMetaOverlay(cell, filePath);
+
+    // ── Hover Intent Preload ──────────────────────────────────────────────────
+    let preloadTimeout;
+    
+    cell.addEventListener('mouseenter', () => {
+      // If hovered for 150ms, load the heavy texture into WebGL memory
+      preloadTimeout = setTimeout(() => {
+        if (globalThis.TextureLoader) {
+          globalThis.TextureLoader.loader.loadTexture(filePath).catch(() => {});
+        } else if (typeof loadTexture === 'function') {
+          loadTexture(filePath).catch(() => {});
+        }
+      }, 150);
+    }, { passive: true });
+
+    cell.addEventListener('mouseleave', () => {
+      clearTimeout(preloadTimeout);
+    }, { passive: true });
+    // ──────────────────────────────────────────────────────────────────────────
 
     cell.addEventListener('click', async () => {
       container.querySelectorAll('.ts-cell--active').forEach(c => c.classList.remove('ts-cell--active'));

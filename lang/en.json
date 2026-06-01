@@ -87,7 +87,8 @@
       "noWildcard":     "Token Slurp: the selected token has no active wildcard path.",
       "followNoActor":  "Token Slurp: current token has no actor or wildcard path to match against.",
       "followNoMatch":  "Token Slurp: no matching token found in the active scene.",
-      "followMultiple": "Token Slurp: multiple matching tokens found — cannot determine which one to follow."
+      "followMultiple": "Token Slurp: multiple matching tokens found — cannot determine which one to follow.",
+      "tokenDeleted": "Token Slurp: tracked token got deleted. Select or track new one."
     },
     "thumbCleaner": {
       "title":           "Thumbnail Cleaner",

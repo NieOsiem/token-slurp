@@ -36,10 +36,9 @@ export function initSlurpWindow() {
       this._pinned             = false;
       this._animation          = getSetting(SETTINGS.UI2_ANIMATION);
       this._duration           = getSetting(SETTINGS.UI2_DURATION);
-      this._tokenUpdateHookId  = null;  // Hooks.on ID for auto-refresh
-      this._refreshTimeout     = null;  // debounce handle
-      // Incremented on every _refreshGrid call; background progressive loads
-      // compare against this to detect stale callbacks and bail early.
+      this._tokenUpdateHookId  = null;
+      this._deleteHookId       = null;
+      this._refreshTimeout     = null;
       this._gridGeneration     = 0;
     }
 
@@ -54,20 +53,13 @@ export function initSlurpWindow() {
       if (el) el.textContent = this.title;
     }
 
-    /**
-     * Compute the window size from current settings.
-     * Called by openSlurpWindow after render so the live setting values are used.
-     * @returns {{ width: number, height: number }}
-     */
     _computeInitialSize() {
       const cw   = getSetting(SETTINGS.UI2_CELL_WIDTH);
       const ch   = getSetting(SETTINGS.UI2_CELL_HEIGHT);
       const cols = getSetting(SETTINGS.UI2_DEFAULT_COLS);
       const rows = getSetting(SETTINGS.UI2_DEFAULT_ROWS);
 
-      // Width:  cols*cw + (cols-1)*4 gaps + 4 grid-padding + 12 content-padding + 17 scrollbar + 16 chrome
       const width  = cols * cw + (cols - 1) * 4 + 4 + 12 + 17 + 16;
-      // Height: rows*ch + (rows-1)*4 gaps + 4 grid-padding + 12 content-padding + 40 header + 8 chrome
       const height = rows * ch + (rows - 1) * 4 + 4 + 12 + 40 + 8;
 
       return { width, height };
@@ -81,22 +73,25 @@ export function initSlurpWindow() {
       this._injectHeaderControls(this.element);
       await this._refreshGrid();
       this._registerUpdateHook();
+      this._registerDeleteHook();
     }
 
     // ── Grid management ───────────────────────────────────────────────────────
 
     /**
-     * Re-render the image grid in place, optionally switching to a different token.
-     * Opens instantly with placeholder cells, then fills in display URLs
-     * progressively as they become available.
-     *
-     * @param {TokenDocument|null} newTokenDoc
+     * Returns true if this.tokenDoc still exists in its parent scene's collection.
+     * A stale doc (token deleted or teleported away) still lives as a JS object
+     * in memory, so this is the only reliable way to detect it.
      */
+    _isTokenValid() {
+      return !!this.tokenDoc?.parent?.tokens?.has(this.tokenDoc.id);
+    }
+
     async _refreshGrid(newTokenDoc = null) {
       const el = this.element;
       if (!el) return;
 
-      if (newTokenDoc && newTokenDoc.id !== this.tokenDoc.id) {
+      if (newTokenDoc && newTokenDoc !== this.tokenDoc) {
         _SlurpWindowClass._instances.delete(this.tokenDoc.id);
 
         this.tokenDoc = newTokenDoc;
@@ -105,6 +100,13 @@ export function initSlurpWindow() {
           ?? this.token;
 
         _SlurpWindowClass._instances.set(this.tokenDoc.id, this);
+      } else if (!newTokenDoc && !this._isTokenValid()) {
+        this._gridGeneration++;
+        const container = el.querySelector('.ts-grid-container');
+        if (container) {
+          container.innerHTML = `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`;
+        }
+        return;
       }
 
       this._syncTitle();
@@ -112,7 +114,6 @@ export function initSlurpWindow() {
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
 
-      // ── Phase 1: fast — resolve file list (cached after first open) ──────────
       container.innerHTML =
         `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`;
 
@@ -126,10 +127,8 @@ export function initSlurpWindow() {
 
       const { files, currentSrc, thumbMode } = tokenData;
       this._files      = files;
-      this._displayMap = new Map();  // reset; filled progressively below (thumb mode) or not at all (lazy)
+      this._displayMap = new Map();
 
-      // Stamp this refresh so stale progressive callbacks from a previous call
-      // can detect they've been superseded and skip their updateCellDisplay.
       const generation = ++this._gridGeneration;
 
       const cellWidth       = getSetting(SETTINGS.UI2_CELL_WIDTH);
@@ -144,27 +143,23 @@ export function initSlurpWindow() {
         currentSrc,
         cellWidth,
         cellHeight,
-        cols:        null,   // css auto-fill
+        cols:        null,
         zoom,
         zoomOrigin,
         showMetaOverlay,
         onSelect: async (filePath) => {
+          if (!this._isTokenValid()) {
+            ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
+            return;
+          }
           await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
           if (!this._pinned) this.close();
         },
       };
 
       if (!shouldUseThumb(files.length, thumbMode)) {
-        // ── Lazy mode ──────────────────────────────────────────────────────────
-        // Files display as themselves. Pass the complete map so renderImageGrid
-        // activates its IntersectionObserver path (defers <img> creation until
-        // cells scroll into view — important for 300+ image sets).
         renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
       } else {
-        // ── Thumb mode ─────────────────────────────────────────────────────────
-        // Phase 2: render grid instantly with placeholder cells.
-        // Phase 3: fill display URLs progressively as they resolve. Fire-and-forget;
-        // the generation counter guards against stale writes from concurrent refreshes.
         const { updateCellDisplay } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
 
         resolveDisplayUrlsProgressive(files, thumbMode, (filePath, url) => {
@@ -197,10 +192,19 @@ export function initSlurpWindow() {
       });
     }
 
-    /**
-     * Move the active-cell highlight to match `src` without rebuilding the grid.
-     * @param {string} src
-     */
+    _registerDeleteHook() {
+      if (this._deleteHookId !== null) return;
+
+      this._deleteHookId = Hooks.on('deleteToken', (tokenDoc) => {
+        if (tokenDoc.id !== this.tokenDoc.id) return;
+        this._gridGeneration++;
+        const container = this.element?.querySelector('.ts-grid-container');
+        if (container) {
+          container.innerHTML = `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`;
+        }
+      });
+    }
+
     _syncActiveCell(src) {
       const container = this.element?.querySelector('.ts-grid-container');
       if (!container) return;
@@ -242,6 +246,11 @@ export function initSlurpWindow() {
         const targetDoc  = controlled.length === 1
           ? controlled[0].document
           : this.tokenDoc;
+
+        if (controlled.length !== 1 && !this._isTokenValid()) {
+          ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
+          return;
+        }
 
         const flags = targetDoc.flags?.[MODULE_ID] ?? {};
         if (!flags[FLAGS.WILDCARD_ACTIVE] || !flags[FLAGS.WILDCARD_PATH]) {
@@ -355,6 +364,10 @@ export function initSlurpWindow() {
       if (this._tokenUpdateHookId !== null) {
         Hooks.off('updateToken', this._tokenUpdateHookId);
         this._tokenUpdateHookId = null;
+      }
+      if (this._deleteHookId !== null) {
+        Hooks.off('deleteToken', this._deleteHookId);
+        this._deleteHookId = null;
       }
       clearTimeout(this._refreshTimeout);
     }
