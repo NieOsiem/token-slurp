@@ -1,6 +1,7 @@
 import { MODULE_ID } from './constants.js';
 import { getSetting, SETTINGS } from './settings.js';
-import { buildGridData, switchTokenImage, renderImageGrid } from './grid.js';
+import { getTokenFiles, switchTokenImage, renderImageGrid } from './grid.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb } from './wildcard.js';
 
 //UI1 — lightweight panel on token hud.
 export class HudPanel {
@@ -26,18 +27,23 @@ export class HudPanel {
 
   /**
    * Build and attach the panel to the HUD root element.
+   * Opens instantly with placeholder cells, then fills in display URLs
+   * progressively as they become available.
    * @returns {Promise<void>}
    */
   async render() {
     HudPanel.current?.destroy();
     HudPanel.current = this;
 
-    const data = await buildGridData(this.tokenDoc);
-    if (!data) {
+    // ── Phase 1: fast — resolve file list (cached after first open) ──────────
+    const tokenData = await getTokenFiles(this.tokenDoc);
+    if (!tokenData) {
       ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.noImages'));
       HudPanel.current = null;
       return;
     }
+
+    const { files, currentSrc, thumbMode } = tokenData;
 
     const cols       = getSetting(SETTINGS.UI1_COLS);
     const rows       = getSetting(SETTINGS.UI1_ROWS);
@@ -56,11 +62,10 @@ export class HudPanel {
     grid.style.width = `${cols * cellWidth + 12 + 16}px`;
     panel.appendChild(grid);
 
-    renderImageGrid({
+    const sharedGridOpts = {
       container:  grid,
-      files:      data.files,
-      displayMap: data.displayMap,
-      currentSrc: data.currentSrc,
+      files,
+      currentSrc,
       cellWidth,
       cellHeight,
       cols,
@@ -70,7 +75,22 @@ export class HudPanel {
         await switchTokenImage(this.tokenDoc, filePath);
         this.destroy();
       },
-    });
+    };
+
+    if (!shouldUseThumb(files.length, thumbMode)) {
+      // ── Lazy mode ────────────────────────────────────────────────────────────
+      // Pass the complete map so renderImageGrid activates its IntersectionObserver
+      // path (defers <img> creation until cells scroll into view).
+      renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
+    } else {
+      // ── Thumb mode ───────────────────────────────────────────────────────────
+      // Render placeholder cells instantly, fill in display URLs progressively.
+      // Fire-and-forget; updateCellDisplay guards against detached cells via isConnected.
+      const { updateCellDisplay } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
+      resolveDisplayUrlsProgressive(files, thumbMode, (filePath, url) => {
+        updateCellDisplay(filePath, url);
+      });
+    }
 
     this.hudRoot.appendChild(panel);
     this.el = panel;

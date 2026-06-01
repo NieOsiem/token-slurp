@@ -1,14 +1,19 @@
 import { MODULE_ID } from './constants.js';
-import { resolveWildcard, resolveDisplayUrls, isVideo, parseFilenameMetadata } from './wildcard.js';
+import { resolveWildcard, resolveDisplayUrls, resolveDisplayUrlsProgressive, isVideo, parseFilenameMetadata } from './wildcard.js';
 import { FLAGS } from './constants.js';
 
 /**
- * Build the full grid dataset for a token.
- * Returns null if the token has no active wildcard.
+ * Fast path: read token flags and resolve the wildcard file list.
+ * No thumbnail work — just the files array and currentSrc.
+ * Returns null if the token has no active wildcard, or if no files match.
+ *
+ * Use this when you want to render a grid immediately with placeholders
+ * and fill in display URLs progressively.
+ *
  * @param {TokenDocument} tokenDoc
- * @returns {Promise<{files: string[], displayMap: Map<string,string>, currentSrc: string}|null>}
+ * @returns {Promise<{files: string[], currentSrc: string, thumbMode: string}|null>}
  */
-export async function buildGridData(tokenDoc) {
+export async function getTokenFiles(tokenDoc) {
   const flags     = tokenDoc.flags?.[MODULE_ID] ?? {};
   const active    = flags[FLAGS.WILDCARD_ACTIVE];
   const rawPath   = flags[FLAGS.WILDCARD_PATH];
@@ -16,11 +21,25 @@ export async function buildGridData(tokenDoc) {
 
   if (!active || !rawPath) return null;
 
-  const files      = await resolveWildcard(rawPath);
+  const files = await resolveWildcard(rawPath);
   if (!files.length) return null;
 
+  return { files, currentSrc: tokenDoc.texture?.src ?? '', thumbMode };
+}
+
+/**
+ * Build the full grid dataset for a token, including resolved display URLs.
+ * Returns null if the token has no active wildcard.
+ *
+ * @param {TokenDocument} tokenDoc
+ * @returns {Promise<{files: string[], displayMap: Map<string,string>, currentSrc: string}|null>}
+ */
+export async function buildGridData(tokenDoc) {
+  const result = await getTokenFiles(tokenDoc);
+  if (!result) return null;
+
+  const { files, currentSrc, thumbMode } = result;
   const displayMap = await resolveDisplayUrls(files, thumbMode);
-  const currentSrc = tokenDoc.texture?.src ?? '';
 
   return { files, displayMap, currentSrc };
 }
@@ -95,10 +114,14 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * Render an image grid into a container element.
  * Supports video (webm/mp4) with hover-autoplay.
  *
+ * Cells with no entry in displayMap (or whose entry is null/undefined) render
+ * as loading placeholders (.ts-cell--loading) so the grid can appear before
+ * all display URLs are resolved.
+ *
  * @param {object}   opts
  * @param {HTMLElement}         opts.container    — element to render into
  * @param {string[]}            opts.files        — ordered list of original paths
- * @param {Map<string,string>}  opts.displayMap   — original → display URL mapping
+ * @param {Map<string,string>}  opts.displayMap   — original → display URL mapping (may be partial)
  * @param {string}              opts.currentSrc   — currently active image path
  * @param {number}              opts.cellWidth
  * @param {number}              opts.cellHeight
@@ -106,7 +129,9 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {function}            opts.onSelect     — async (filePath) => void
  * @param {number}              [opts.zoom=1]     — scale factor 1.0–2.0
  * @param {string}              [opts.zoomOrigin='center center'] — CSS transform-origin
- * @param {boolean}             [opts.showMetaOverlay=false] — overlay name/size/scale badge on cells that have metadata
+ * @param {boolean}             [opts.showMetaOverlay=false] — overlay name/size/scale badge on cells
+ * @returns {{ updateCellDisplay: (filePath: string, url: string) => void }}
+ *   Call updateCellDisplay to swap a loading placeholder for a real image at any time after render.
  */
 export function renderImageGrid(opts) {
   const {
@@ -123,8 +148,12 @@ export function renderImageGrid(opts) {
   container.style.setProperty('--ts-zoom-origin', zoomOrigin);
   if (cols !== null) container.style.setProperty('--ts-cols', String(cols));
 
-  // Lazy mode: every display URL equals its source file (no thumbnails generated)
-  const isLazy = [...displayMap.values()].every((v, i) => v === files[i]);
+  // Lazy mode: every display URL equals its source file (no thumbnails generated).
+  // We only engage the IntersectionObserver path when displayMap is fully populated
+  // AND every value equals its file (i.e. pure lazy mode, no partial thumb maps).
+  // Checked by key lookup rather than index so insertion order doesn't matter.
+  const isFullyPopulated = files.every(f => displayMap.has(f));
+  const isLazy = isFullyPopulated && files.every(f => displayMap.get(f) === f);
 
   // Two separate observers, created once and shared across all cells in lazy mode.
   // imgObserver is one-shot: unobserves after the <img> is created.
@@ -137,8 +166,12 @@ export function renderImageGrid(opts) {
     root: container, rootMargin: '0px', threshold: 0,
   }) : null;
 
+  // Index cells by filePath for O(1) lookups from updateCellDisplay
+  /** @type {Map<string, HTMLElement>} */
+  const cellMap = new Map();
+
   for (const filePath of files) {
-    const displayUrl = displayMap.get(filePath) ?? filePath;
+    const displayUrl = displayMap.get(filePath);
     const isCurrent  = filePath === currentSrc;
     const vid        = isVideo(filePath);
 
@@ -147,7 +180,10 @@ export function renderImageGrid(opts) {
     cell.dataset.src = filePath;
     cell.title       = filePath.split('/').pop();
 
-    if (isLazy) {
+    if (!displayUrl) {
+      // No display URL yet — render as a shimmer placeholder
+      cell.classList.add('ts-cell--loading');
+    } else if (isLazy) {
       if (vid) {
         vidObserver.observe(cell);
       } else {
@@ -167,7 +203,26 @@ export function renderImageGrid(opts) {
     });
 
     container.appendChild(cell);
+    cellMap.set(filePath, cell);
   }
+
+  /**
+   * Swap a loading placeholder for a real image/video.
+   * Safe to call even if the container has been removed from the DOM (no-op).
+   *
+   * @param {string} filePath   — the original file path (key into cellMap)
+   * @param {string} url        — the display URL to render (thumb or original)
+   */
+  function updateCellDisplay(filePath, url) {
+    const cell = cellMap.get(filePath);
+    if (!cell || !cell.isConnected) return;
+    if (!cell.classList.contains('ts-cell--loading')) return;
+
+    cell.classList.remove('ts-cell--loading');
+    _appendMedia(cell, url, isVideo(filePath));
+  }
+
+  return { updateCellDisplay };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
-import { buildGridData, switchTokenImage, renderImageGrid } from './grid.js';
+import { getTokenFiles, switchTokenImage, renderImageGrid } from './grid.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb } from './wildcard.js';
 
 let _SlurpWindowClass = null;
 
@@ -37,6 +38,9 @@ export function initSlurpWindow() {
       this._duration           = getSetting(SETTINGS.UI2_DURATION);
       this._tokenUpdateHookId  = null;  // Hooks.on ID for auto-refresh
       this._refreshTimeout     = null;  // debounce handle
+      // Incremented on every _refreshGrid call; background progressive loads
+      // compare against this to detect stale callbacks and bail early.
+      this._gridGeneration     = 0;
     }
 
     get title() {
@@ -83,11 +87,10 @@ export function initSlurpWindow() {
 
     /**
      * Re-render the image grid in place, optionally switching to a different token.
-     * Safe to call at any time after the window has been rendered.
+     * Opens instantly with placeholder cells, then fills in display URLs
+     * progressively as they become available.
      *
      * @param {TokenDocument|null} newTokenDoc
-     *   Pass a different TokenDocument to switch the window to that token.
-     *   Pass null (default) to simply refresh the current token's grid.
      */
     async _refreshGrid(newTokenDoc = null) {
       const el = this.element;
@@ -108,8 +111,26 @@ export function initSlurpWindow() {
 
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
+
+      // ── Phase 1: fast — resolve file list (cached after first open) ──────────
       container.innerHTML =
         `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`;
+
+      const tokenData = await getTokenFiles(this.tokenDoc);
+
+      if (!tokenData) {
+        container.innerHTML =
+          `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`;
+        return;
+      }
+
+      const { files, currentSrc, thumbMode } = tokenData;
+      this._files      = files;
+      this._displayMap = new Map();  // reset; filled progressively below (thumb mode) or not at all (lazy)
+
+      // Stamp this refresh so stale progressive callbacks from a previous call
+      // can detect they've been superseded and skip their updateCellDisplay.
+      const generation = ++this._gridGeneration;
 
       const cellWidth       = getSetting(SETTINGS.UI2_CELL_WIDTH);
       const cellHeight      = getSetting(SETTINGS.UI2_CELL_HEIGHT);
@@ -117,25 +138,13 @@ export function initSlurpWindow() {
       const zoomOrigin      = getSetting(SETTINGS.UI2_ZOOM_ORIGIN);
       const showMetaOverlay = getSetting(SETTINGS.UI2_SHOW_META_OVERLAY);
 
-      const data = await buildGridData(this.tokenDoc);
-
-      if (!data) {
-        container.innerHTML =
-          `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`;
-        return;
-      }
-
-      this._files      = data.files;
-      this._displayMap = data.displayMap;
-
-      renderImageGrid({
+      const sharedGridOpts = {
         container,
-        files:      this._files,
-        displayMap: this._displayMap,
-        currentSrc: data.currentSrc,
+        files,
+        currentSrc,
         cellWidth,
         cellHeight,
-        cols:       null,   // css auto-fill
+        cols:        null,   // css auto-fill
         zoom,
         zoomOrigin,
         showMetaOverlay,
@@ -143,7 +152,27 @@ export function initSlurpWindow() {
           await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
           if (!this._pinned) this.close();
         },
-      });
+      };
+
+      if (!shouldUseThumb(files.length, thumbMode)) {
+        // ── Lazy mode ──────────────────────────────────────────────────────────
+        // Files display as themselves. Pass the complete map so renderImageGrid
+        // activates its IntersectionObserver path (defers <img> creation until
+        // cells scroll into view — important for 300+ image sets).
+        renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
+      } else {
+        // ── Thumb mode ─────────────────────────────────────────────────────────
+        // Phase 2: render grid instantly with placeholder cells.
+        // Phase 3: fill display URLs progressively as they resolve. Fire-and-forget;
+        // the generation counter guards against stale writes from concurrent refreshes.
+        const { updateCellDisplay } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
+
+        resolveDisplayUrlsProgressive(files, thumbMode, (filePath, url) => {
+          if (this._gridGeneration !== generation) return;
+          this._displayMap.set(filePath, url);
+          updateCellDisplay(filePath, url);
+        });
+      }
     }
 
     // ── Token update reactions ────────────────────────────────────────────────

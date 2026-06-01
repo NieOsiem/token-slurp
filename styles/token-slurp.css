@@ -385,3 +385,22 @@
   max-width: 100%;
 }
 
+@keyframes ts-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.ts-cell--loading {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: ts-shimmer 1.4s ease-in-out infinite;
+}
+
+.ts-cell-meta {
+  z-index: 1;
+}

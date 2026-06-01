@@ -127,45 +127,96 @@ function joinPath(...parts) {
 // ── Thumbnail generation ─────────────────────────────────────────────────────
 
 /**
+ * Browse the thumbnail storage directory once and return a Set of existing filenames.
+ * Returns an empty Set if the directory doesn't exist yet.
+ * Centralises the directory listing so callers can do O(1) existence checks
+ * instead of one FilePicker.browse per file.
+ *
+ * @param {string} storageRoot
+ * @returns {Promise<Set<string>>}
+ */
+async function _browseThumbDirOnce(storageRoot) {
+  try {
+    const result = await FilePicker.browse('data', storageRoot);
+    return new Set((result.files ?? []).map(f => f.split('/').pop()));
+  } catch {
+    // Storage directory doesn't exist yet — no thumbnails have been generated
+    return new Set();
+  }
+}
+
+/**
+ * Given a list of image paths and a thumb mode, call onFileReady(filePath, displayUrl)
+ * as each display URL becomes known:
+ *   - Existing thumbnails fire immediately after a single directory listing.
+ *   - Files that need generation fire when their thumbnail finishes.
+ *   - Lazy-mode files (no thumbnails) all fire synchronously before returning.
+ *
+ * Safe to fire-and-forget; callbacks that target detached DOM nodes are harmless no-ops.
+ *
+ * @param {string[]}  files
+ * @param {string}    thumbMode
+ * @param {function}  onFileReady  — (filePath: string, displayUrl: string) => void
+ */
+export async function resolveDisplayUrlsProgressive(files, thumbMode, onFileReady) {
+  if (!shouldUseThumb(files.length, thumbMode)) {
+    // Lazy mode — files display as themselves; callbacks fire synchronously
+    for (const f of files) onFileReady(f, f);
+    return;
+  }
+
+  const storageRoot   = getSetting(SETTINGS.THUMB_STORAGE_PATH);
+  const existingNames = await _browseThumbDirOnce(storageRoot);
+  const toGenerate    = [];
+
+  // One pass: fire immediately for cached thumbs, collect the rest for generation
+  for (const file of files) {
+    const thumbPath = thumbPathFor(file, storageRoot);
+    if (existingNames.has(thumbPath.split('/').pop())) {
+      onFileReady(file, thumbPath);
+    } else {
+      toGenerate.push({ file, thumbPath });
+    }
+  }
+
+  if (!toGenerate.length) return;
+
+  // Generate missing thumbnails in batches; fire callback as each completes
+  const BATCH = 8;
+  for (let i = 0; i < toGenerate.length; i += BATCH) {
+    const batch = toGenerate.slice(i, i + BATCH);
+    await Promise.all(batch.map(async ({ file, thumbPath }) => {
+      // Pass existingNames so ensureThumb skips its own directory browse
+      const url = await ensureThumb(file, thumbPath, false, existingNames);
+      onFileReady(file, url);
+    }));
+  }
+}
+
+/**
  * Given a list of image paths and a thumb mode, return a Map of
- *   original path → URL to display  (thumb URL or original URL)
+ *   original path → URL to display  (thumb URL or original URL).
+ * Backed by resolveDisplayUrlsProgressive for efficient directory access.
  *
  * @param {string[]} files
  * @param {string}   thumbMode  — THUMB_MODES value
  * @returns {Promise<Map<string,string>>}
  */
 export async function resolveDisplayUrls(files, thumbMode) {
-  const useThumb = shouldUseThumb(files.length, thumbMode);
-
-  if (!useThumb) {
-    // Lazy mode
-    return new Map(files.map(f => [f, f]));
-  }
-
-  const storageRoot = getSetting(SETTINGS.THUMB_STORAGE_PATH);
-  const map         = new Map();
-
-  // Generate thumbs in small parallel batches
-  const BATCH = 8;
-  for (let i = 0; i < files.length; i += BATCH) {
-    const batch = files.slice(i, i + BATCH);
-    await Promise.all(batch.map(async file => {
-      const thumbPath = thumbPathFor(file, storageRoot);
-      const url       = await ensureThumb(file, thumbPath);
-      map.set(file, url);
-    }));
-  }
-
+  const map = new Map();
+  await resolveDisplayUrlsProgressive(files, thumbMode, (f, url) => map.set(f, url));
   return map;
 }
 
 /**
  * Decide whether to use thumbnails based on count and mode.
+ * Exported so callers (ui-window, ui-hud) can choose between the progressive
+ * thumb path and the IntersectionObserver lazy path before calling renderImageGrid.
  * @param {number} count
  * @param {string} mode
  * @returns {boolean}
  */
-function shouldUseThumb(count, mode) {
+export function shouldUseThumb(count, mode) {
   if (mode === THUMB_MODES.FORCE) return true;
   if (mode === THUMB_MODES.LAZY)  return false;
   return count < THUMB_AUTO_THRESHOLD;  // AUTO
@@ -200,20 +251,31 @@ async function ensureDirectory(dirPath) {
   }
 }
 
-// Ensure a thumbnail exists for the given source file.
-// If force is true, always regenerate even if the thumbnail exists.
-// Falls back to the original path on any error.
-export async function ensureThumb(sourcePath, thumbPath, force = false) {
+/**
+ * Ensure a thumbnail exists for the given source file.
+ *
+ * @param {string}      sourcePath
+ * @param {string}      thumbPath
+ * @param {boolean}     [force=false]         — always regenerate even if the thumbnail exists
+ * @param {Set<string>} [existingNames=null]  — pre-built set of filenames already in thumbDir;
+ *                                              when provided, skips the FilePicker.browse check
+ * @returns {Promise<string>}  the thumb path on success, or sourcePath as fallback
+ */
+export async function ensureThumb(sourcePath, thumbPath, force = false, existingNames = null) {
   const thumbDir  = thumbPath.substring(0, thumbPath.lastIndexOf('/'));
   const thumbName = thumbPath.split('/').pop();
 
   let exists = false;
-  try {
-    const result = await FilePicker.browse('data', thumbDir);
-    exists = (result.files ?? []).some(f => f.split('/').pop() === thumbName);
-  } catch { /* directory doesn't exist yet — fall through to generation */ }
+  if (existingNames !== null) {
+    // Fast path: use the pre-built set, avoid a FilePicker.browse round-trip
+    exists = existingNames.has(thumbName);
+  } else {
+    try {
+      const result = await FilePicker.browse('data', thumbDir);
+      exists = (result.files ?? []).some(f => f.split('/').pop() === thumbName);
+    } catch { /* directory doesn't exist yet — fall through to generation */ }
+  }
 
-  // If thumbnail exists and we're not forcing regeneration, return early
   if (exists && !force) return thumbPath;
 
   try {
