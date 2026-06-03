@@ -111,6 +111,98 @@
   min-height: 0;
 }
 
+/* In grouped mode the outer container switches to a single column of group blocks */
+.token-slurp-window .ts-grid-container.ts-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Group blocks ─────────────────────────────────────────────────────────── */
+
+.ts-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.ts-group + .ts-group {
+  margin-top: 6px;
+}
+
+.ts-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0px 2px 2px;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ts-group-header:hover .ts-group-label {
+  color: var(--color-border-highlight, #ff6400);
+}
+
+.ts-group-rule {
+  flex: 1;
+  height: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 0 2px;
+}
+
+.ts-group-label {
+  font-size: 0.82em;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.03em;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-group-count {
+  font-size: 0.75em;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.ts-group-toggle {
+  flex-shrink: 0;
+  background: none !important;
+  border: none !important;
+  padding: 0 2px !important;
+  width: auto !important;
+  height: 14px !important;
+  min-height: 14px !important;
+  opacity: 0.6;
+  transition: transform 0.15s ease, opacity 0.15s;
+  line-height: 1;
+}
+
+.ts-group-toggle:hover {
+  opacity: 1;
+}
+
+.ts-group--collapsed .ts-group-toggle {
+  transform: rotate(-90deg);
+}
+
+.ts-group-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--ts-cell-w, 140px));
+  gap: 4px;
+  padding: 4px 0 2px;
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.ts-group--collapsed .ts-group-cells {
+  display: none;
+}
+
 /* ── UI2 header layout ────────────────────────────────────────────────────── */
 
 .token-slurp-window .window-header {
@@ -172,6 +264,22 @@
   -webkit-user-drag: none;
 }
 
+.ts-group-select-wrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ts-group-select {
+  max-width: 120px !important;
+  width: 120px !important;
+  flex-shrink: 0;
+  font-size: 0.8em;
+  cursor: pointer;
+  -webkit-user-drag: none;
+  -webkit-app-region: no-drag;
+}
+
 .ts-duration-slider {
   width: 140px !important;
   max-width: 140px !important;
@@ -223,7 +331,6 @@
   gap: 10px;
 }
 
-/* Prevent Foundry's 100% button width override inside the cleaner */
 .token-slurp-thumb-cleaner button {
   width: auto !important;
 }
@@ -348,7 +455,7 @@
   align-self: center;
   margin: 0 2px;
 }
- 
+
 .ts-reload-btn,
 .ts-follow-btn {
   flex-shrink: 0;
@@ -357,9 +464,8 @@
   -webkit-app-region: no-drag;
 }
 
-
 /* ── Cell metadata overlay ───────────────────────────────────────────────── */
- 
+
 .ts-cell-meta {
   position: absolute;
   bottom: 0;
@@ -372,8 +478,9 @@
   gap: 1px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.72) 40%);
   pointer-events: none;
+  z-index: 1;
 }
- 
+
 .ts-cell-meta span {
   font-size: 11px;
   line-height: 1.2;
@@ -399,8 +506,4 @@
   );
   background-size: 200% 100%;
   animation: ts-shimmer 1.4s ease-in-out infinite;
-}
-
-.ts-cell-meta {
-  z-index: 1;
 }

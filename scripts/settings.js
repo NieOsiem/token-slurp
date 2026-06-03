@@ -20,6 +20,10 @@ export const SETTINGS = {
   UI2_ANIMATION:         'ui2Animation',
   UI2_DURATION:          'ui2Duration',
   UI2_SHOW_META_OVERLAY: 'ui2ShowMetaOverlay',
+  // Grouping
+  UI2_GROUP_NAME_ENABLED:   'ui2GroupNameEnabled',
+  UI2_GROUP_NAME_MIN_COUNT: 'ui2GroupNameMinCount',
+  UI2_GROUP_COLLAPSE_MODE:  'ui2GroupCollapseMode',
 };
 
 export function registerSettings() {
@@ -46,16 +50,6 @@ export function registerSettings() {
 
   // ── Client settings (per-user) ───────────────────────────────────────────
 
-  /**
-   * Register a numeric client setting.
-   * @param {string} key
-   * @param {string} name   — i18n key
-   * @param {string} hint   — i18n key
-   * @param {number} def    — default value
-   * @param {number} min
-   * @param {number} max
-   * @param {number} [step=1]
-   */
   const clientNum = (key, name, hint, def, min, max, step = 1) =>
     game.settings.register(MODULE_ID, key, {
       name, hint,
@@ -111,7 +105,40 @@ export function registerSettings() {
     default: true,
   });
 
-  // ── Hidden persisted state — not shown in settings UI ────────────────────
+  // ── Grouping settings ────────────────────────────────────────────────────
+
+  game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_NAME_ENABLED, {
+    name:    'TOKEN_SLURP.settings.ui2GroupNameEnabled.name',
+    hint:    'TOKEN_SLURP.settings.ui2GroupNameEnabled.hint',
+    scope:   'client',
+    config:  true,
+    type:    Boolean,
+    default: false,
+  });
+
+  clientNum(
+    SETTINGS.UI2_GROUP_NAME_MIN_COUNT,
+    'TOKEN_SLURP.settings.ui2GroupNameMinCount.name',
+    'TOKEN_SLURP.settings.ui2GroupNameMinCount.hint',
+    3, 2, 20,
+  );
+
+  game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_COLLAPSE_MODE, {
+    name:    'TOKEN_SLURP.settings.ui2GroupCollapseMode.name',
+    hint:    'TOKEN_SLURP.settings.ui2GroupCollapseMode.hint',
+    scope:   'client',
+    config:  true,
+    type:    String,
+    default: 'collapse',
+    choices: {
+      collapse: 'TOKEN_SLURP.settings.ui2GroupCollapseMode.collapse',
+      top:      'TOKEN_SLURP.settings.ui2GroupCollapseMode.top',
+      none:     'TOKEN_SLURP.settings.ui2GroupCollapseMode.none',
+    },
+  });
+
+  // ── Hidden persisted state ───────────────────────────────────────────────
+
   game.settings.register(MODULE_ID, SETTINGS.UI2_ANIMATION, {
     scope: 'client', config: false, type: String, default: 'none',
   });

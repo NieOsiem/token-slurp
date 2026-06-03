@@ -40,6 +40,21 @@
       "ui2ShowMetaOverlay": {
         "name": "Window: Show Metadata Overlay",
         "hint": "Display a small badge on image cells (name, size, scale)."
+      },
+      "ui2GroupNameEnabled": {
+        "name": "Window: Group by Name Tag",
+        "hint": "When enabled, files sharing the same _name_value_ tag are grouped together (if enough exist). Explicit _group_ tags always group regardless of this setting."
+      },
+      "ui2GroupNameMinCount": {
+        "name": "Window: Name Group Minimum",
+        "hint": "Minimum number of files a name group must contain to be shown as a group. Files in smaller groups are placed in Ungrouped."
+      },
+      "ui2GroupCollapseMode": {
+        "name": "Window: Group Selection Behaviour",
+        "hint": "What happens when a group is selected from the dropdown.",
+        "collapse": "Collapse other groups",
+        "top":      "Scroll selected group to top",
+        "none":     "No automatic scroll or collapse"
       }
     },
     "tokenConfig": {
@@ -64,7 +79,10 @@
       "duration":       "Duration",
       "loading":        "Loading…",
       "reloadSelected": "Reload for selected token",
-      "followScene":    "Follow token to active scene"
+      "followScene":    "Follow token to active scene",
+      "groupAll":       "All groups",
+      "groupSelect":    "Jump to group",
+      "groupUngrouped": "Ungrouped"
     },
     "animation": {
       "instant":    "Instant",
@@ -88,7 +106,7 @@
       "followNoActor":  "Token Slurp: current token has no actor or wildcard path to match against.",
       "followNoMatch":  "Token Slurp: no matching token found in the active scene.",
       "followMultiple": "Token Slurp: multiple matching tokens found — cannot determine which one to follow.",
-      "tokenDeleted": "Token Slurp: tracked token got deleted. Select or track new one."
+      "tokenDeleted":   "Token Slurp: tracked token got deleted. Select or track new one."
     },
     "thumbCleaner": {
       "title":           "Thumbnail Cleaner",

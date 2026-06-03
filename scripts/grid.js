@@ -3,13 +3,6 @@ import { resolveWildcard, resolveDisplayUrls, resolveDisplayUrlsProgressive, isV
 import { FLAGS } from './constants.js';
 
 /**
- * Fast path: read token flags and resolve the wildcard file list.
- * No thumbnail work — just the files array and currentSrc.
- * Returns null if the token has no active wildcard, or if no files match.
- *
- * Use this when you want to render a grid immediately with placeholders
- * and fill in display URLs progressively.
- *
  * @param {TokenDocument} tokenDoc
  * @returns {Promise<{files: string[], currentSrc: string, thumbMode: string}|null>}
  */
@@ -28,9 +21,6 @@ export async function getTokenFiles(tokenDoc) {
 }
 
 /**
- * Build the full grid dataset for a token, including resolved display URLs.
- * Returns null if the token has no active wildcard.
- *
  * @param {TokenDocument} tokenDoc
  * @returns {Promise<{files: string[], displayMap: Map<string,string>, currentSrc: string}|null>}
  */
@@ -45,11 +35,70 @@ export async function buildGridData(tokenDoc) {
 }
 
 /**
+ * Partition a file list into named groups based on _group_ and optionally _name_ metadata tags.
+ * Explicit _group_ tags always win. _name_ grouping is optional and threshold-gated.
+ * Files with no qualifying group land in an Ungrouped bucket at the end.
+ *
+ * @param {string[]} files
+ * @param {object}   opts
+ * @param {boolean}  opts.nameGroupEnabled   — group by _name_ tag in addition to _group_
+ * @param {number}   opts.nameGroupMinCount  — minimum files for a name group to qualify
+ * @returns {{ groups: Array<{key:string, label:string, files:string[]}>, hasGroups: boolean }}
+ */
+export function computeGroups(files, { nameGroupEnabled = false, nameGroupMinCount = 3 } = {}) {
+  const explicitMap = new Map();
+  const remaining   = [];
+
+  for (const file of files) {
+    const meta = parseFilenameMetadata(file);
+    if (meta.group) {
+      if (!explicitMap.has(meta.group)) explicitMap.set(meta.group, []);
+      explicitMap.get(meta.group).push(file);
+    } else {
+      remaining.push(file);
+    }
+  }
+
+  const groups = [...explicitMap.entries()].map(([key, groupFiles]) => ({ key, label: key, files: groupFiles }));
+
+  if (nameGroupEnabled && remaining.length) {
+    const nameMap   = new Map();
+    const ungrouped = [];
+
+    for (const file of remaining) {
+      const meta = parseFilenameMetadata(file);
+      if (meta.name) {
+        if (!nameMap.has(meta.name)) nameMap.set(meta.name, []);
+        nameMap.get(meta.name).push(file);
+      } else {
+        ungrouped.push(file);
+      }
+    }
+
+    for (const [key, nameFiles] of nameMap) {
+      if (nameFiles.length >= nameGroupMinCount) {
+        groups.push({ key, label: key, files: nameFiles });
+      } else {
+        ungrouped.push(...nameFiles);
+      }
+    }
+
+    if (groups.length > 0 && ungrouped.length) {
+      groups.push({ key: '__ungrouped__', label: game.i18n.localize('TOKEN_SLURP.window.groupUngrouped'), files: ungrouped });
+    }
+  } else if (remaining.length && groups.length > 0) {
+    groups.push({ key: '__ungrouped__', label: game.i18n.localize('TOKEN_SLURP.window.groupUngrouped'), files: remaining });
+  }
+
+  return { groups, hasGroups: groups.some(g => g.key !== '__ungrouped__') };
+}
+
+/**
  * (`_name_Sir Roland_`, `_size_2_`, `_scale_1.5_`)
  *
  * @param {TokenDocument} tokenDoc
  * @param {string}        newSrc
- * @returns {object}  Plain update object (no animation options)
+ * @returns {object}
  */
 export function buildTokenImageUpdate(tokenDoc, newSrc) {
   const newMeta  = parseFilenameMetadata(newSrc);
@@ -57,26 +106,20 @@ export function buildTokenImageUpdate(tokenDoc, newSrc) {
   const proto    = tokenDoc.actor?.prototypeToken;
   const data     = { 'texture.src': newSrc };
 
-  // ── Token name ──────────────────────────────────────────────────────────────
   if ('name' in newMeta) {
     data.name = newMeta.name;
   } else if ('name' in prevMeta && proto !== undefined) {
     data.name = proto.name ?? tokenDoc.name;
   }
 
-  // ── Token size (square grid units) ─────────────────────────────────────────
   if ('size' in newMeta) {
     const size = parseFloat(newMeta.size);
-    if (!isNaN(size) && size > 0) {
-      data.width  = size;
-      data.height = size;
-    }
+    if (!isNaN(size) && size > 0) { data.width = size; data.height = size; }
   } else if ('size' in prevMeta && proto !== undefined) {
     data.width  = proto.width  ?? 1;
     data.height = proto.height ?? 1;
   }
 
-  // ── Token scale (texture ratio) ─────────────────────────────────────────────
   if ('scale' in newMeta) {
     const scale = parseFloat(newMeta.scale);
     if (!isNaN(scale) && scale > 0) {
@@ -92,12 +135,10 @@ export function buildTokenImageUpdate(tokenDoc, newSrc) {
 }
 
 /**
- * Switch a token to a new image, applying any metadata encoded in the filename.
- * 'none' animation is a fade with 0 duration.
  * @param {TokenDocument} tokenDoc
  * @param {string}        newSrc
- * @param {string}        [animation] — 'none' | any TokenAnimationTransition value
- * @param {number}        [duration]  — animation duration in milliseconds
+ * @param {string}        [animation]
+ * @param {number}        [duration]
  * @returns {Promise<void>}
  */
 export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', duration = 800) {
@@ -112,26 +153,23 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
 
 /**
  * Render an image grid into a container element.
- * Supports video (webm/mp4) with hover-autoplay.
- *
- * Cells with no entry in displayMap (or whose entry is null/undefined) render
- * as loading placeholders (.ts-cell--loading) so the grid can appear before
- * all display URLs are resolved.
+ * Supports flat and grouped layouts, video hover-autoplay, lazy loading,
+ * and progressive thumbnail fill-in.
  *
  * @param {object}   opts
- * @param {HTMLElement}         opts.container    — element to render into
- * @param {string[]}            opts.files        — ordered list of original paths
- * @param {Map<string,string>}  opts.displayMap   — original → display URL mapping (may be partial)
- * @param {string}              opts.currentSrc   — currently active image path
+ * @param {HTMLElement}         opts.container
+ * @param {string[]}            opts.files           — flat ordered list (used when no groups)
+ * @param {Map<string,string>}  opts.displayMap       — original → display URL (may be partial)
+ * @param {string}              opts.currentSrc
  * @param {number}              opts.cellWidth
  * @param {number}              opts.cellHeight
- * @param {number|null}         opts.cols         — grid columns (null = css auto-fill)
- * @param {function}            opts.onSelect     — async (filePath) => void
- * @param {number}              [opts.zoom=1]     — scale factor 1.0–2.0
- * @param {string}              [opts.zoomOrigin='center center'] — CSS transform-origin
- * @param {boolean}             [opts.showMetaOverlay=false] — overlay name/size/scale badge on cells
- * @returns {{ updateCellDisplay: (filePath: string, url: string) => void }}
- * Call updateCellDisplay to swap a loading placeholder for a real image at any time after render.
+ * @param {number|null}         opts.cols             — grid columns (null = css auto-fill)
+ * @param {function}            opts.onSelect         — async (filePath) => void
+ * @param {number}              [opts.zoom=1]
+ * @param {string}              [opts.zoomOrigin='center center']
+ * @param {boolean}             [opts.showMetaOverlay=false]
+ * @param {Array}               [opts.groups]         — from computeGroups(); triggers grouped layout
+ * @returns {{ updateCellDisplay: function, groupElements: Map }}
  */
 export function renderImageGrid(opts) {
   const {
@@ -139,81 +177,64 @@ export function renderImageGrid(opts) {
     cellWidth, cellHeight, cols, onSelect,
     zoom = 1, zoomOrigin = 'center center',
     showMetaOverlay = false,
+    groups,
   } = opts;
 
   container.innerHTML = '';
+  container.classList.remove('ts-grouped');
   container.style.setProperty('--ts-cell-w',     `${cellWidth}px`);
   container.style.setProperty('--ts-cell-h',     `${cellHeight}px`);
   container.style.setProperty('--ts-zoom',        String(zoom));
   container.style.setProperty('--ts-zoom-origin', zoomOrigin);
   if (cols !== null) container.style.setProperty('--ts-cols', String(cols));
 
-  // Lazy mode: every display URL equals its source file (no thumbnails generated).
-  // We only engage the IntersectionObserver path when displayMap is fully populated
-  // AND every value equals its file (i.e. pure lazy mode, no partial thumb maps).
-  // Checked by key lookup rather than index so insertion order doesn't matter.
-  const isFullyPopulated = files.every(f => displayMap.has(f));
-  const isLazy = isFullyPopulated && files.every(f => displayMap.get(f) === f);
+  const useGroups = Array.isArray(groups) && groups.some(g => g.key !== '__ungrouped__');
+  const allFiles  = useGroups ? groups.flatMap(g => g.files) : (files ?? []);
 
-  // Two separate observers, created once and shared across all cells in lazy mode.
-  // imgObserver is one-shot: unobserves after the <img> is created.
-  // vidObserver is continuous: plays when visible, pauses when not.
+  // Lazy mode: IntersectionObserver path — only when displayMap is fully populated
+  // with identity mappings (every file maps to itself, no thumbnails).
+  const isFullyPopulated = allFiles.every(f => displayMap.has(f));
+  const isLazy = isFullyPopulated && allFiles.every(f => displayMap.get(f) === f);
+
   const imgObserver = isLazy ? new IntersectionObserver(_onLazyImgEntry, {
     root: container, rootMargin: '200px', threshold: 0,
   }) : null;
-
   const vidObserver = isLazy ? new IntersectionObserver(_onVideoVisibilityEntry, {
     root: container, rootMargin: '0px', threshold: 0,
   }) : null;
 
-  // Index cells by filePath for O(1) lookups from updateCellDisplay
   /** @type {Map<string, HTMLElement>} */
   const cellMap = new Map();
 
-  for (const filePath of files) {
+  function createCell(filePath) {
     const displayUrl = displayMap.get(filePath);
     const isCurrent  = filePath === currentSrc;
     const vid        = isVideo(filePath);
 
-    const cell = document.createElement('div');
+    const cell       = document.createElement('div');
     cell.className   = `ts-cell${isCurrent ? ' ts-cell--active' : ''}`;
     cell.dataset.src = filePath;
     cell.title       = filePath.split('/').pop();
 
     if (!displayUrl) {
-      // No display URL yet — render as a shimmer placeholder
       cell.classList.add('ts-cell--loading');
     } else if (isLazy) {
-      if (vid) {
-        vidObserver.observe(cell);
-      } else {
-        cell.dataset.lazySrc = displayUrl;
-        imgObserver.observe(cell);
-      }
+      if (vid) { vidObserver.observe(cell); }
+      else { cell.dataset.lazySrc = displayUrl; imgObserver.observe(cell); }
     } else {
       _appendMedia(cell, displayUrl, vid);
     }
 
     if (showMetaOverlay) _appendMetaOverlay(cell, filePath);
 
-    // ── Hover Intent Preload ──────────────────────────────────────────────────
     let preloadTimeout;
-    
     cell.addEventListener('mouseenter', () => {
-      // If hovered for 150ms, load the heavy texture into WebGL memory
       preloadTimeout = setTimeout(() => {
-        if (globalThis.TextureLoader) {
-          globalThis.TextureLoader.loader.loadTexture(filePath).catch(() => {});
-        } else if (typeof loadTexture === 'function') {
-          loadTexture(filePath).catch(() => {});
-        }
+        if (globalThis.TextureLoader) globalThis.TextureLoader.loader.loadTexture(filePath).catch(() => {});
+        else if (typeof loadTexture === 'function') loadTexture(filePath).catch(() => {});
       }, 150);
     }, { passive: true });
-
-    cell.addEventListener('mouseleave', () => {
-      clearTimeout(preloadTimeout);
-    }, { passive: true });
-    // ──────────────────────────────────────────────────────────────────────────
+    cell.addEventListener('mouseleave', () => clearTimeout(preloadTimeout), { passive: true });
 
     cell.addEventListener('click', async () => {
       container.querySelectorAll('.ts-cell--active').forEach(c => c.classList.remove('ts-cell--active'));
@@ -221,32 +242,69 @@ export function renderImageGrid(opts) {
       await onSelect(filePath);
     });
 
-    container.appendChild(cell);
     cellMap.set(filePath, cell);
+    return cell;
   }
 
-  /**
-   * Swap a loading placeholder for a real image/video.
-   * Safe to call even if the container has been removed from the DOM (no-op).
-   *
-   * @param {string} filePath   — the original file path (key into cellMap)
-   * @param {string} url        — the display URL to render (thumb or original)
-   */
+  /** @type {Map<string, {el: HTMLElement, cellsEl: HTMLElement}>} */
+  const groupElements = new Map();
+
+  if (useGroups) {
+    container.classList.add('ts-grouped');
+
+    for (const group of groups) {
+      const groupEl     = document.createElement('div');
+      groupEl.className = `ts-group${group.key === '__ungrouped__' ? ' ts-group--ungrouped' : ''}`;
+
+      const headerEl     = document.createElement('div');
+      headerEl.className = 'ts-group-header';
+
+      const labelEl       = document.createElement('span');
+      labelEl.className   = 'ts-group-label';
+      labelEl.textContent = group.label;
+
+      const countEl       = document.createElement('span');
+      countEl.className   = 'ts-group-count';
+      countEl.textContent = `(${group.files.length})`;
+
+      const toggleBtn     = document.createElement('button');
+      toggleBtn.type      = 'button';
+      toggleBtn.className = 'ts-group-toggle';
+      toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
+      // Stop click from reaching the header listener twice
+      toggleBtn.addEventListener('click', ev => ev.stopPropagation());
+
+      const ruleEl     = document.createElement('span');
+      ruleEl.className = 'ts-group-rule';
+
+      headerEl.append(labelEl, ruleEl, countEl, toggleBtn);
+      headerEl.addEventListener('click', () => groupEl.classList.toggle('ts-group--collapsed'));
+
+      const cellsEl     = document.createElement('div');
+      cellsEl.className = 'ts-group-cells';
+      for (const file of group.files) cellsEl.appendChild(createCell(file));
+
+      groupEl.append(headerEl, cellsEl);
+      container.appendChild(groupEl);
+      groupElements.set(group.key, { el: groupEl, cellsEl });
+    }
+  } else {
+    for (const filePath of allFiles) container.appendChild(createCell(filePath));
+  }
+
   function updateCellDisplay(filePath, url) {
     const cell = cellMap.get(filePath);
     if (!cell || !cell.isConnected) return;
     if (!cell.classList.contains('ts-cell--loading')) return;
-
     cell.classList.remove('ts-cell--loading');
     _appendMedia(cell, url, isVideo(filePath));
   }
 
-  return { updateCellDisplay };
+  return { updateCellDisplay, groupElements };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/** One-shot observer: load image when it approaches the viewport, then stop watching. */
 function _onLazyImgEntry(entries, obs) {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
@@ -262,10 +320,6 @@ function _onLazyImgEntry(entries, obs) {
   }
 }
 
-/**
- * Continuous observer: play video when visible, pause when not.
- * Creates the <video> element on first entry to defer decoding cost.
- */
 function _onVideoVisibilityEntry(entries) {
   for (const entry of entries) {
     const cell = entry.target;
@@ -289,15 +343,11 @@ function _onVideoVisibilityEntry(entries) {
   }
 }
 
-/**
- * @param {HTMLElement} cell
- * @param {string}      filePath
- */
 function _appendMetaOverlay(cell, filePath) {
   const meta = parseFilenameMetadata(filePath);
   if (!Object.keys(meta).length) return;
 
-  const overlay = document.createElement('div');
+  const overlay     = document.createElement('div');
   overlay.className = 'ts-cell-meta';
 
   if ('name'  in meta) overlay.append(_metaLine(`Name: ${meta.name}`));
@@ -307,28 +357,21 @@ function _appendMetaOverlay(cell, filePath) {
   cell.appendChild(overlay);
 }
 
-/** @param {string} text @returns {HTMLElement} */
 function _metaLine(text) {
-  const span = document.createElement('span');
+  const span       = document.createElement('span');
   span.textContent = text;
   return span;
 }
 
-/**
- * @param {HTMLElement} cell
- * @param {string}      displayUrl
- * @param {boolean}     vid
- */
 function _appendMedia(cell, displayUrl, vid) {
   if (!vid) {
-    const img = document.createElement('img');
+    const img   = document.createElement('img');
     img.src     = displayUrl;
     img.loading = 'lazy';
     cell.appendChild(img);
     return;
   }
 
-  // Video cells: show a static thumbnail, swap to <video> on hover
   const img   = document.createElement('img');
   img.src     = displayUrl;
   img.loading = 'lazy';
@@ -338,7 +381,7 @@ function _appendMedia(cell, displayUrl, vid) {
 
   cell.addEventListener('mouseenter', () => {
     if (videoEl) return;
-    videoEl = document.createElement('video');
+    videoEl             = document.createElement('video');
     videoEl.src         = cell.dataset.src;
     videoEl.autoplay    = true;
     videoEl.muted       = true;

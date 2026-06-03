@@ -1,7 +1,7 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
-import { getTokenFiles, switchTokenImage, renderImageGrid } from './grid.js';
-import { resolveDisplayUrlsProgressive, shouldUseThumb } from './wildcard.js';
+import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups } from './grid.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb, parseFilenameMetadata } from './wildcard.js';
 
 let _SlurpWindowClass = null;
 
@@ -32,6 +32,8 @@ export function initSlurpWindow() {
       this.token               = token;
       this.tokenDoc            = token.document;
       this._files              = [];
+      this._groups             = [];
+      this._activeGroupKey     = null;   // null = All
       this._displayMap         = new Map();
       this._pinned             = false;
       this._animation          = getSetting(SETTINGS.UI2_ANIMATION);
@@ -40,6 +42,7 @@ export function initSlurpWindow() {
       this._deleteHookId       = null;
       this._refreshTimeout     = null;
       this._gridGeneration     = 0;
+      this._groupElements      = new Map();  // key → { el, cellsEl }
     }
 
     get title() {
@@ -78,11 +81,6 @@ export function initSlurpWindow() {
 
     // ── Grid management ───────────────────────────────────────────────────────
 
-    /**
-     * Returns true if this.tokenDoc still exists in its parent scene's collection.
-     * A stale doc (token deleted or teleported away) still lives as a JS object
-     * in memory, so this is the only reliable way to detect it.
-     */
     _isTokenValid() {
       return !!this.tokenDoc?.parent?.tokens?.has(this.tokenDoc.id);
     }
@@ -93,41 +91,41 @@ export function initSlurpWindow() {
 
       if (newTokenDoc && newTokenDoc !== this.tokenDoc) {
         _SlurpWindowClass._instances.delete(this.tokenDoc.id);
-
         this.tokenDoc = newTokenDoc;
-        this.token =
-          canvas.tokens?.placeables.find(t => t.document === newTokenDoc)
-          ?? this.token;
-
+        this.token    = canvas.tokens?.placeables.find(t => t.document === newTokenDoc) ?? this.token;
         _SlurpWindowClass._instances.set(this.tokenDoc.id, this);
       } else if (!newTokenDoc && !this._isTokenValid()) {
         this._gridGeneration++;
-        const container = el.querySelector('.ts-grid-container');
-        if (container) {
-          container.innerHTML = `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`;
-        }
+        this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`);
         return;
       }
 
       this._syncTitle();
+      this._activeGroupKey = null;
 
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
 
-      container.innerHTML =
-        `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`;
+      this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.window.loading')}</p>`);
 
       const tokenData = await getTokenFiles(this.tokenDoc);
 
       if (!tokenData) {
-        container.innerHTML =
-          `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`;
+        this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`);
+        this._updateGroupSelector([]);
         return;
       }
 
       const { files, currentSrc, thumbMode } = tokenData;
       this._files      = files;
       this._displayMap = new Map();
+
+      const nameGroupEnabled  = getSetting(SETTINGS.UI2_GROUP_NAME_ENABLED);
+      const nameGroupMinCount = getSetting(SETTINGS.UI2_GROUP_NAME_MIN_COUNT);
+      const { groups, hasGroups } = computeGroups(files, { nameGroupEnabled, nameGroupMinCount });
+      this._groups = groups;
+
+      this._updateGroupSelector(hasGroups ? groups : []);
 
       const generation = ++this._gridGeneration;
 
@@ -147,6 +145,7 @@ export function initSlurpWindow() {
         zoom,
         zoomOrigin,
         showMetaOverlay,
+        groups:      hasGroups ? groups : undefined,
         onSelect: async (filePath) => {
           if (!this._isTokenValid()) {
             ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
@@ -158,9 +157,11 @@ export function initSlurpWindow() {
       };
 
       if (!shouldUseThumb(files.length, thumbMode)) {
-        renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
+        const { groupElements } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
+        this._groupElements = groupElements;
       } else {
-        const { updateCellDisplay } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
+        const { updateCellDisplay, groupElements } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
+        this._groupElements = groupElements;
 
         resolveDisplayUrlsProgressive(files, thumbMode, (filePath, url) => {
           if (this._gridGeneration !== generation) return;
@@ -168,6 +169,134 @@ export function initSlurpWindow() {
           updateCellDisplay(filePath, url);
         });
       }
+
+      if (hasGroups) this._autoSelectGroup(currentSrc);
+    }
+
+    _setGridContent(html) {
+      const container = this.element?.querySelector('.ts-grid-container');
+      if (container) container.innerHTML = html;
+    }
+
+    // ── Group management ──────────────────────────────────────────────────────
+
+    /**
+     * Populate the group selector <select> in the header.
+     * Hides the selector entirely when there are no groups.
+     * @param {Array} groups
+     */
+    _updateGroupSelector(groups) {
+      const sel = this.element?.querySelector('.ts-group-select');
+      if (!sel) return;
+
+      const wrap = sel.closest('.ts-group-select-wrap');
+
+      if (!groups.length) {
+        if (wrap) wrap.style.display = 'none';
+        return;
+      }
+
+      if (wrap) wrap.style.display = '';
+
+      sel.innerHTML = `<option value="">${game.i18n.localize('TOKEN_SLURP.window.groupAll')}</option>`;
+      for (const g of groups) {
+        const opt   = document.createElement('option');
+        opt.value   = g.key;
+        opt.textContent = g.label;
+        sel.appendChild(opt);
+      }
+      sel.value = '';
+    }
+
+    /**
+     * Apply a group selection to the rendered grid.
+     * Mode behaviour:
+     *   collapse — selected group stays expanded, all others collapse
+     *   top      — scroll selected group to the top of the container
+     *   none     — only scroll, no collapsing
+     * null key = "All" — expand everything.
+     *
+     * @param {string|null} groupKey
+     */
+    _selectGroup(groupKey) {
+      this._activeGroupKey = groupKey;
+
+      const collapseMode = getSetting(SETTINGS.UI2_GROUP_COLLAPSE_MODE);
+      const container    = this.element?.querySelector('.ts-grid-container');
+      if (!container) return;
+
+      if (groupKey === null) {
+        // All — expand everything
+        for (const { el } of this._groupElements.values()) {
+          el.classList.remove('ts-group--collapsed');
+        }
+        container.scrollTop = 0;
+        return;
+      }
+
+      if (collapseMode === 'collapse') {
+        for (const [key, { el }] of this._groupElements) {
+          el.classList.toggle('ts-group--collapsed', key !== groupKey);
+        }
+      }
+
+      // Scroll the selected group header into view after any layout changes settle
+      requestAnimationFrame(() => {
+        const targetEntry = this._groupElements.get(groupKey);
+        if (!targetEntry) return;
+
+        if (collapseMode === 'top' || collapseMode === 'none') {
+          const containerTop = container.getBoundingClientRect().top;
+          const headerTop    = targetEntry.el.getBoundingClientRect().top;
+          container.scrollTop += headerTop - containerTop;
+        } else {
+          // collapse mode — group is the only visible one, scroll to top
+          container.scrollTop = 0;
+        }
+      });
+    }
+
+    /**
+     * Attempt to auto-select a group on open, based on:
+     *   1. _group_ tag of the current active image (explicit always wins)
+     *   2. token canvas name matched against group labels (case-insensitive)
+     * Falls back to All if no match.
+     *
+     * @param {string} currentSrc
+     */
+    _autoSelectGroup(currentSrc) {
+      if (!this._groups.length) return;
+
+      let targetKey = null;
+
+      // 1. Explicit group tag on the active image
+      if (currentSrc) {
+        const meta = parseFilenameMetadata(currentSrc);
+        if (meta.group) {
+          const found = this._groups.find(g => g.key === meta.group);
+          if (found) targetKey = found.key;
+        }
+      }
+
+      // 2. Token canvas name fallback
+      if (!targetKey) {
+        const tokenName = this.tokenDoc?.name?.toLowerCase() ?? '';
+        const matched   = this._groups.find(
+          g => g.key !== '__ungrouped__' && g.label.toLowerCase() === tokenName
+        );
+        if (matched) targetKey = matched.key;
+      }
+      // 3. Active image is in the Ungrouped bucket
+      if (!targetKey) {
+        const ungrouped = this._groups.find(g => g.key === '__ungrouped__');
+        if (ungrouped?.files.includes(currentSrc)) targetKey = '__ungrouped__';
+      }
+
+      // Sync the selector UI
+      const sel = this.element?.querySelector('.ts-group-select');
+      if (sel) sel.value = targetKey;
+
+      this._selectGroup(targetKey);
     }
 
     // ── Token update reactions ────────────────────────────────────────────────
@@ -187,7 +316,6 @@ export function initSlurpWindow() {
         }
 
         if ('name' in changes) this._syncTitle();
-
         if (changes.texture?.src) this._syncActiveCell(changes.texture.src);
       });
     }
@@ -198,20 +326,15 @@ export function initSlurpWindow() {
       this._deleteHookId = Hooks.on('deleteToken', (tokenDoc) => {
         if (tokenDoc.id !== this.tokenDoc.id) return;
         this._gridGeneration++;
-        const container = this.element?.querySelector('.ts-grid-container');
-        if (container) {
-          container.innerHTML = `<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`;
-        }
+        this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`);
       });
     }
 
     _syncActiveCell(src) {
       const container = this.element?.querySelector('.ts-grid-container');
       if (!container) return;
-      container.querySelectorAll('.ts-cell--active')
-               .forEach(c => c.classList.remove('ts-cell--active'));
-      container.querySelector(`.ts-cell[data-src="${CSS.escape(src)}"]`)
-               ?.classList.add('ts-cell--active');
+      container.querySelectorAll('.ts-cell--active').forEach(c => c.classList.remove('ts-cell--active'));
+      container.querySelector(`.ts-cell[data-src="${CSS.escape(src)}"]`)?.classList.add('ts-cell--active');
     }
 
     // ── Header controls ───────────────────────────────────────────────────────
@@ -220,32 +343,46 @@ export function initSlurpWindow() {
       const header = el.querySelector('.window-header');
       if (!header || header.querySelector('.ts-header-controls')) return;
 
-      const pinBtn = document.createElement('button');
+      // ── Pin toggle (prepended to header) ─────────────────────────────────
+      const pinBtn     = document.createElement('button');
       pinBtn.type      = 'button';
       pinBtn.className = `ts-pin-toggle${this._pinned ? ' ts-pinned' : ''}`;
       pinBtn.title     = game.i18n.localize('TOKEN_SLURP.window.pin');
       pinBtn.innerHTML = '<i class="fas fa-thumbtack"></i>';
       header.prepend(pinBtn);
-
       pinBtn.addEventListener('click', () => {
         this._pinned = !this._pinned;
         pinBtn.classList.toggle('ts-pinned', this._pinned);
       });
 
-      const controls = document.createElement('div');
+      // ── Right-hand control strip ──────────────────────────────────────────
+      const controls     = document.createElement('div');
       controls.className = 'ts-header-controls';
 
-      const reloadBtn = document.createElement('button');
+      // Group selector
+      const groupWrap     = document.createElement('span');
+      groupWrap.className = 'ts-group-select-wrap';
+      groupWrap.style.display = 'none';   // hidden until groups exist
+
+      const groupSel     = document.createElement('select');
+      groupSel.className = 'ts-group-select';
+      groupSel.title     = game.i18n.localize('TOKEN_SLURP.window.groupSelect');
+      groupWrap.appendChild(groupSel);
+
+      groupSel.addEventListener('change', () => {
+        const key = groupSel.value || null;
+        this._selectGroup(key);
+      });
+
+      // Reload button
+      const reloadBtn     = document.createElement('button');
       reloadBtn.type      = 'button';
       reloadBtn.className = 'ts-reload-btn';
       reloadBtn.title     = game.i18n.localize('TOKEN_SLURP.window.reloadSelected');
       reloadBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
-
       reloadBtn.addEventListener('click', async () => {
         const controlled = canvas.tokens?.controlled ?? [];
-        const targetDoc  = controlled.length === 1
-          ? controlled[0].document
-          : this.tokenDoc;
+        const targetDoc  = controlled.length === 1 ? controlled[0].document : this.tokenDoc;
 
         if (controlled.length !== 1 && !this._isTokenValid()) {
           ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
@@ -261,12 +398,12 @@ export function initSlurpWindow() {
         await this._refreshGrid(targetDoc);
       });
 
-      const followBtn = document.createElement('button');
+      // Follow button
+      const followBtn     = document.createElement('button');
       followBtn.type      = 'button';
       followBtn.className = 'ts-follow-btn';
       followBtn.title     = game.i18n.localize('TOKEN_SLURP.window.followScene');
       followBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
-
       followBtn.addEventListener('click', async () => {
         const myActorId = this.tokenDoc.actor?.id;
         const myPath    = this.tokenDoc.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH];
@@ -278,10 +415,8 @@ export function initSlurpWindow() {
 
         const matches = (canvas.scene?.tokens ?? []).filter(td => {
           if (td.id === this.tokenDoc.id) return false;
-          const sameActor = td.actor?.id === myActorId;
-          const samePath  =
-            td.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH] === myPath;
-          return sameActor && samePath;
+          return td.actor?.id === myActorId &&
+                 td.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH] === myPath;
         });
 
         if (matches.length === 0) {
@@ -296,56 +431,51 @@ export function initSlurpWindow() {
         await this._refreshGrid(matches[0]);
       });
 
-      const sep = document.createElement('span');
+      // Duration slider + label
+      const slider     = document.createElement('input');
+      slider.type      = 'range';
+      slider.className = 'ts-duration-slider';
+      slider.min       = '100';
+      slider.max       = '3000';
+      slider.step      = '100';
+      slider.value     = String(this._duration);
+      slider.title     = game.i18n.localize('TOKEN_SLURP.window.duration');
+
+      const durationLabel     = document.createElement('span');
+      durationLabel.className = 'ts-duration-label';
+      durationLabel.textContent = `${this._duration}ms`;
+
+      // Animation select
+      const animSel     = document.createElement('select');
+      animSel.className = 'ts-anim-select';
+      animSel.title     = game.i18n.localize('TOKEN_SLURP.window.animation');
+      animSel.innerHTML = ANIMATION_OPTIONS.map(o =>
+        `<option value="${o.value}"${o.value === this._animation ? ' selected' : ''}>${game.i18n.localize(o.label)}</option>`
+      ).join('');
+
+      const sep     = document.createElement('span');
       sep.className = 'ts-controls-sep';
 
-      controls.innerHTML = `
-        <input class="ts-duration-slider" type="range" min="100" max="3000" step="100"
-               value="${this._duration}"
-               title="${game.i18n.localize('TOKEN_SLURP.window.duration')}"/>
-        <span class="ts-duration-label">${this._duration}ms</span>
-        <select class="ts-anim-select" title="${game.i18n.localize('TOKEN_SLURP.window.animation')}">
-          ${ANIMATION_OPTIONS.map(o =>
-            `<option value="${o.value}"${o.value === this._animation ? ' selected' : ''}>
-              ${game.i18n.localize(o.label)}
-            </option>`
-          ).join('')}
-        </select>
-      `;
+      controls.append(groupWrap, sep, followBtn, reloadBtn, slider, durationLabel, animSel);
 
-      controls.prepend(sep, followBtn, reloadBtn);
-
-      const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
-      if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
-      else header.appendChild(controls);
-
-      const select = controls.querySelector('.ts-anim-select');
-      const slider = controls.querySelector('.ts-duration-slider');
-      const label  = controls.querySelector('.ts-duration-label');
-
-      const _stopEvent = (ev) => {
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-      };
-
-      for (const el of [slider, select, reloadBtn, followBtn]) {
-        el.addEventListener('pointerdown',  _stopEvent, { capture: true });
-        el.addEventListener('mousedown',    _stopEvent, { capture: true });
-        el.addEventListener('touchstart',   _stopEvent, { passive: false, capture: true });
-        el.addEventListener('dragstart',    _stopEvent, { capture: true });
-        el.addEventListener('selectstart',  _stopEvent, { capture: true });
-        el.style.webkitAppRegion = 'no-drag';
+      // Prevent Foundry's drag/window-move handlers from swallowing control interactions
+      const _stopEvent = ev => { ev.stopPropagation(); ev.stopImmediatePropagation(); };
+      for (const node of [slider, animSel, reloadBtn, followBtn, groupSel]) {
+        for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart']) {
+          node.addEventListener(evName, _stopEvent, { capture: true });
+        }
+        node.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
+        node.style.webkitAppRegion = 'no-drag';
       }
 
       const syncSliderVisibility = (value) => {
         const instant = value === 'none';
-        slider.style.display = instant ? 'none' : '';
-        label.style.display  = instant ? 'none' : '';
+        slider.style.display       = instant ? 'none' : '';
+        durationLabel.style.display = instant ? 'none' : '';
       };
-
       syncSliderVisibility(this._animation);
 
-      select.addEventListener('change', ev => {
+      animSel.addEventListener('change', ev => {
         this._animation = ev.currentTarget.value;
         setSetting(SETTINGS.UI2_ANIMATION, this._animation);
         syncSliderVisibility(this._animation);
@@ -354,8 +484,12 @@ export function initSlurpWindow() {
       slider.addEventListener('input', ev => {
         this._duration = Number(ev.currentTarget.value);
         setSetting(SETTINGS.UI2_DURATION, this._duration);
-        label.textContent = `${this._duration}ms`;
+        durationLabel.textContent = `${this._duration}ms`;
       });
+
+      const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
+      if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
+      else header.appendChild(controls);
     }
 
     async _onClose(_options) {
@@ -389,6 +523,5 @@ export async function openSlurpWindow(token) {
   const win = new _SlurpWindowClass({ token });
   _SlurpWindowClass._instances.set(id, win);
   await win.render({ force: true });
-
   win.setPosition(win._computeInitialSize());
 }
