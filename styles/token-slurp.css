@@ -30,7 +30,7 @@
 
 .ts-cell {
   position: relative;
-  width:  var(--ts-cell-w, 80px);
+  width:  100%;
   height: var(--ts-cell-h, 80px);
   cursor: pointer;
   border-radius: 3px;
@@ -101,7 +101,7 @@
 
 .token-slurp-window .ts-grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--ts-cell-w, 140px));
+  grid-template-columns: repeat(auto-fill, minmax(var(--ts-cell-w, 140px), 1fr));
   gap: 4px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -123,6 +123,9 @@
 .ts-group {
   display: flex;
   flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  padding: 0 2px 2px;
 }
 
 .ts-group + .ts-group {
@@ -192,7 +195,7 @@
 
 .ts-group-cells {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--ts-cell-w, 140px));
+  grid-template-columns: repeat(auto-fill, minmax(var(--ts-cell-w, 140px), 1fr));
   gap: 4px;
   padding: 4px 0 2px;
   overflow: hidden;
@@ -201,6 +204,31 @@
 
 .ts-group--collapsed .ts-group-cells {
   display: none;
+}
+
+/* ── Group N-column layout ────────────────────────────────────────────────── */
+
+/* Switch the grouped container to an N-column equal-width grid */
+.ts-grid-container.ts-grouped.ts-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--ts-layout-cols, 2), 1fr);
+  gap: 6px;
+  align-items: start; /* groups don't stretch to fill the tallest in their row */
+}
+
+/* Large groups span every column */
+.ts-grid-container.ts-grouped.ts-layout-grid .ts-group--fullspan {
+  grid-column: 1 / -1;
+}
+
+/* Row gap is handled by the grid gap */
+.ts-grid-container.ts-grouped.ts-layout-grid .ts-group + .ts-group {
+  margin-top: 0;
+}
+
+/* Sticky headers don't work predictably inside a multi-column grid */
+.ts-grid-container.ts-grouped.ts-layout-grid .ts-group-header {
+  position: relative;
 }
 
 /* ── UI2 header layout ────────────────────────────────────────────────────── */

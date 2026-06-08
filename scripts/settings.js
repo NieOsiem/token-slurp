@@ -24,6 +24,8 @@ export const SETTINGS = {
   UI2_GROUP_NAME_ENABLED:   'ui2GroupNameEnabled',
   UI2_GROUP_NAME_MIN_COUNT: 'ui2GroupNameMinCount',
   UI2_GROUP_COLLAPSE_MODE:  'ui2GroupCollapseMode',
+  UI2_GROUP_LAYOUT_COLS:    'ui2GroupLayoutCols',
+  UI2_GROUP_BALANCE_ROWS:   'ui2GroupBalanceRows',
 };
 
 export function registerSettings() {
@@ -135,6 +137,29 @@ export function registerSettings() {
       top:      'TOKEN_SLURP.settings.ui2GroupCollapseMode.top',
       none:     'TOKEN_SLURP.settings.ui2GroupCollapseMode.none',
     },
+  });
+
+  game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_LAYOUT_COLS, {
+    name:    'TOKEN_SLURP.settings.ui2GroupLayoutCols.name',
+    hint:    'TOKEN_SLURP.settings.ui2GroupLayoutCols.hint',
+    scope:   'client',
+    config:  true,
+    type:    String,
+    default: '1',
+    choices: {
+      '1': 'TOKEN_SLURP.settings.ui2GroupLayoutCols.off',
+      '2': 'TOKEN_SLURP.settings.ui2GroupLayoutCols.two',
+      '3': 'TOKEN_SLURP.settings.ui2GroupLayoutCols.three',
+    },
+  });
+
+  game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_BALANCE_ROWS, {
+    name:    'TOKEN_SLURP.settings.ui2GroupBalanceRows.name',
+    hint:    'TOKEN_SLURP.settings.ui2GroupBalanceRows.hint',
+    scope:   'client',
+    config:  true,
+    type:    Boolean,
+    default: false,
   });
 
   // ── Hidden persisted state ───────────────────────────────────────────────

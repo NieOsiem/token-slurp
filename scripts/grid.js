@@ -94,6 +94,27 @@ export function computeGroups(files, { nameGroupEnabled = false, nameGroupMinCou
 }
 
 /**
+ * Find a column count >= defaultCols that reduces orphaned images in the last row.
+ * Only triggers when the last row is less than half full.
+ * Returns null if no useful improvement exists within a reasonable range.
+ *
+ * @param {number} fileCount
+ * @param {number} defaultCols
+ * @returns {number|null}
+ */
+export function balancedCols(fileCount, defaultCols) {
+  if (!fileCount || !defaultCols || fileCount <= defaultCols) return null;
+  const remainder = fileCount % defaultCols;
+  if (remainder === 0 || remainder >= Math.ceil(defaultCols / 2)) return null;
+  const defaultRows = Math.ceil(fileCount / defaultCols);
+  const cap = defaultCols + Math.max(4, Math.ceil(defaultCols * 0.5));
+  for (let c = defaultCols + 1; c <= cap; c++) {
+    if (Math.ceil(fileCount / c) < defaultRows) return c;
+  }
+  return null;
+}
+
+/**
  * (`_name_Sir Roland_`, `_size_2_`, `_scale_1.5_`)
  *
  * @param {TokenDocument} tokenDoc
@@ -271,7 +292,6 @@ export function renderImageGrid(opts) {
       toggleBtn.type      = 'button';
       toggleBtn.className = 'ts-group-toggle';
       toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
-      // Stop click from reaching the header listener twice
       toggleBtn.addEventListener('click', ev => ev.stopPropagation());
 
       const ruleEl     = document.createElement('span');

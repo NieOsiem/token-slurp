@@ -1,6 +1,6 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
-import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups } from './grid.js';
+import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups, balancedCols } from './grid.js';
 import { resolveDisplayUrlsProgressive, shouldUseThumb, parseFilenameMetadata } from './wildcard.js';
 
 let _SlurpWindowClass = null;
@@ -33,7 +33,7 @@ export function initSlurpWindow() {
       this.tokenDoc            = token.document;
       this._files              = [];
       this._groups             = [];
-      this._activeGroupKey     = null;   // null = All
+      this._activeGroupKey     = null;
       this._displayMap         = new Map();
       this._pinned             = false;
       this._animation          = getSetting(SETTINGS.UI2_ANIMATION);
@@ -42,7 +42,9 @@ export function initSlurpWindow() {
       this._deleteHookId       = null;
       this._refreshTimeout     = null;
       this._gridGeneration     = 0;
-      this._groupElements      = new Map();  // key → { el, cellsEl }
+      this._groupElements      = new Map();
+      this._resizeObserver     = null;
+      this._layoutTimeout      = null;
     }
 
     get title() {
@@ -77,6 +79,8 @@ export function initSlurpWindow() {
       await this._refreshGrid();
       this._registerUpdateHook();
       this._registerDeleteHook();
+      this._registerResizeObserver();
+      this._registerGroupSyncHandler();
     }
 
     // ── Grid management ───────────────────────────────────────────────────────
@@ -171,6 +175,7 @@ export function initSlurpWindow() {
       }
 
       if (hasGroups) this._autoSelectGroup(currentSrc);
+      requestAnimationFrame(() => this._reapplyGroupLayout());
     }
 
     _setGridContent(html) {
@@ -180,11 +185,6 @@ export function initSlurpWindow() {
 
     // ── Group management ──────────────────────────────────────────────────────
 
-    /**
-     * Populate the group selector <select> in the header.
-     * Hides the selector entirely when there are no groups.
-     * @param {Array} groups
-     */
     _updateGroupSelector(groups) {
       const sel = this.element?.querySelector('.ts-group-select');
       if (!sel) return;
@@ -208,16 +208,6 @@ export function initSlurpWindow() {
       sel.value = '';
     }
 
-    /**
-     * Apply a group selection to the rendered grid.
-     * Mode behaviour:
-     *   collapse — selected group stays expanded, all others collapse
-     *   top      — scroll selected group to the top of the container
-     *   none     — only scroll, no collapsing
-     * null key = "All" — expand everything.
-     *
-     * @param {string|null} groupKey
-     */
     _selectGroup(groupKey) {
       this._activeGroupKey = groupKey;
 
@@ -226,7 +216,6 @@ export function initSlurpWindow() {
       if (!container) return;
 
       if (groupKey === null) {
-        // All — expand everything
         for (const { el } of this._groupElements.values()) {
           el.classList.remove('ts-group--collapsed');
         }
@@ -240,7 +229,6 @@ export function initSlurpWindow() {
         }
       }
 
-      // Scroll the selected group header into view after any layout changes settle
       requestAnimationFrame(() => {
         const targetEntry = this._groupElements.get(groupKey);
         if (!targetEntry) return;
@@ -250,26 +238,16 @@ export function initSlurpWindow() {
           const headerTop    = targetEntry.el.getBoundingClientRect().top;
           container.scrollTop += headerTop - containerTop;
         } else {
-          // collapse mode — group is the only visible one, scroll to top
           container.scrollTop = 0;
         }
       });
     }
 
-    /**
-     * Attempt to auto-select a group on open, based on:
-     *   1. _group_ tag of the current active image (explicit always wins)
-     *   2. token canvas name matched against group labels (case-insensitive)
-     * Falls back to All if no match.
-     *
-     * @param {string} currentSrc
-     */
     _autoSelectGroup(currentSrc) {
       if (!this._groups.length) return;
 
       let targetKey = null;
 
-      // 1. Explicit group tag on the active image
       if (currentSrc) {
         const meta = parseFilenameMetadata(currentSrc);
         if (meta.group) {
@@ -278,7 +256,6 @@ export function initSlurpWindow() {
         }
       }
 
-      // 2. Token canvas name fallback
       if (!targetKey) {
         const tokenName = this.tokenDoc?.name?.toLowerCase() ?? '';
         const matched   = this._groups.find(
@@ -286,17 +263,144 @@ export function initSlurpWindow() {
         );
         if (matched) targetKey = matched.key;
       }
-      // 3. Active image is in the Ungrouped bucket
+
       if (!targetKey) {
         const ungrouped = this._groups.find(g => g.key === '__ungrouped__');
         if (ungrouped?.files.includes(currentSrc)) targetKey = '__ungrouped__';
       }
 
-      // Sync the selector UI
       const sel = this.element?.querySelector('.ts-group-select');
       if (sel) sel.value = targetKey;
 
       this._selectGroup(targetKey);
+    }
+
+    // ── Group layout (tiling + row balancing) ─────────────────────────────────
+
+    _registerResizeObserver() {
+      if (this._resizeObserver) return;
+      const container = this.element?.querySelector('.ts-grid-container');
+      if (!container) return;
+      this._resizeObserver = new ResizeObserver(() => {
+        clearTimeout(this._layoutTimeout);
+        this._layoutTimeout = setTimeout(() => this._reapplyGroupLayout(), 50);
+      });
+      this._resizeObserver.observe(container);
+    }
+
+    /**
+     * In tiling mode, collapsing or expanding one group in a row should sync all
+     * groups on that same row. Bound once via a dataset flag; always reads the
+     * live _groupElements map so it stays correct across grid refreshes.
+     */
+    _registerGroupSyncHandler() {
+      const container = this.element?.querySelector('.ts-grid-container');
+      if (!container || container.dataset.tsSyncBound) return;
+      container.dataset.tsSyncBound = '1';
+
+      container.addEventListener('click', (ev) => {
+        if (parseInt(getSetting(SETTINGS.UI2_GROUP_LAYOUT_COLS)) <= 1) return;
+        if (!ev.target.closest('.ts-group-header')) return;
+        const clickedGroup = ev.target.closest('.ts-group');
+        if (!clickedGroup) return;
+
+        const isCollapsed = clickedGroup.classList.contains('ts-group--collapsed');
+        const clickedTop  = clickedGroup.getBoundingClientRect().top;
+
+        for (const { el } of this._groupElements.values()) {
+          if (el === clickedGroup) continue;
+          if (Math.abs(el.getBoundingClientRect().top - clickedTop) < 3) {
+            el.classList.toggle('ts-group--collapsed', isCollapsed);
+          }
+        }
+      });
+    }
+
+    /**
+     * Apply tiling and/or row-balancing to the current group elements.
+     * Safe to call repeatedly; reads settings fresh each time.
+     *
+     * Tiling:    the grouped container switches to a CSS grid of N equal columns.
+     *            Groups that would exceed FULLSPAN_ROWS rows in a single column
+     *            get grid-column: 1/-1 so they span the full width.
+     * Balancing: groups with a sparse last row get a slightly higher column count
+     *            (and proportionally narrower cells) to spread images more evenly.
+     *            Cell width is never reduced below 70 % of the configured size.
+     */
+    _reapplyGroupLayout() {
+      const container = this.element?.querySelector('.ts-grid-container');
+      if (!container) return;
+
+      if (!this._groupElements.size) {
+        container.classList.remove('ts-layout-grid');
+        container.style.removeProperty('--ts-layout-cols');
+        return;
+      }
+
+      const layoutCols     = parseInt(getSetting(SETTINGS.UI2_GROUP_LAYOUT_COLS)) || 1;
+      const balanceEnabled = getSetting(SETTINGS.UI2_GROUP_BALANCE_ROWS);
+      const useGrid        = layoutCols > 1;
+
+      container.classList.toggle('ts-layout-grid', useGrid);
+      if (useGrid) {
+        container.style.setProperty('--ts-layout-cols', String(layoutCols));
+      } else {
+        container.style.removeProperty('--ts-layout-cols');
+      }
+
+      if (!useGrid && !balanceEnabled) return;
+
+      const cellWidth      = getSetting(SETTINGS.UI2_CELL_WIDTH);
+      const gap            = 4;   // gap between image cells
+      const COL_GAP        = 6;   // gap between layout columns (matches CSS)
+      const GROUP_SIDE_PAD = 4;   // 2px left + 2px right CSS padding on .ts-group
+      const innerWidth     = container.clientWidth - 4; // subtract container's 2px side padding
+      if (innerWidth <= 0) return;
+
+      // Width of a single layout column; equals innerWidth when not in grid mode.
+      const colWidth        = useGrid ? (innerWidth - (layoutCols - 1) * COL_GAP) / layoutCols : innerWidth;
+      const colContentWidth = colWidth - GROUP_SIDE_PAD;
+      const colCellCols     = Math.max(1, Math.floor((colContentWidth + gap) / (cellWidth + gap)));
+
+      // Full-span groups use the entire container width.
+      const fullContentWidth = innerWidth - GROUP_SIDE_PAD;
+      const fullCellCols     = useGrid
+        ? Math.max(1, Math.floor((fullContentWidth + gap) / (cellWidth + gap)))
+        : colCellCols;
+
+      // Groups exceeding this many rows in a single column span all columns instead.
+      const FULLSPAN_ROWS = 3;
+
+      for (const group of this._groups) {
+        const entry = this._groupElements.get(group.key);
+        if (!entry) continue;
+        const { el, cellsEl } = entry;
+
+        const isFullSpan = useGrid && Math.ceil(group.files.length / colCellCols) > FULLSPAN_ROWS;
+        el.classList.toggle('ts-group--fullspan', isFullSpan);
+
+        if (balanceEnabled) {
+          const groupCellCols = isFullSpan ? fullCellCols    : colCellCols;
+          const availWidth    = isFullSpan ? fullContentWidth : colContentWidth;
+          const bCols = balancedCols(group.files.length, groupCellCols);
+          if (bCols) {
+            const bCellWidth = Math.floor((availWidth - (bCols - 1) * gap) / bCols);
+            if (bCellWidth >= Math.floor(cellWidth * 0.7)) {
+              cellsEl.style.gridTemplateColumns = `repeat(${bCols}, minmax(${bCellWidth}px, 1fr))`;
+              cellsEl.style.setProperty('--ts-cell-w', `${bCellWidth}px`);
+            } else {
+              cellsEl.style.gridTemplateColumns = '';
+              cellsEl.style.removeProperty('--ts-cell-w');
+            }
+          } else {
+            cellsEl.style.gridTemplateColumns = '';
+            cellsEl.style.removeProperty('--ts-cell-w');
+          }
+        } else {
+          cellsEl.style.gridTemplateColumns = '';
+          cellsEl.style.removeProperty('--ts-cell-w');
+        }
+      }
     }
 
     // ── Token update reactions ────────────────────────────────────────────────
@@ -343,7 +447,6 @@ export function initSlurpWindow() {
       const header = el.querySelector('.window-header');
       if (!header || header.querySelector('.ts-header-controls')) return;
 
-      // ── Pin toggle (prepended to header) ─────────────────────────────────
       const pinBtn     = document.createElement('button');
       pinBtn.type      = 'button';
       pinBtn.className = `ts-pin-toggle${this._pinned ? ' ts-pinned' : ''}`;
@@ -355,14 +458,12 @@ export function initSlurpWindow() {
         pinBtn.classList.toggle('ts-pinned', this._pinned);
       });
 
-      // ── Right-hand control strip ──────────────────────────────────────────
       const controls     = document.createElement('div');
       controls.className = 'ts-header-controls';
 
-      // Group selector
       const groupWrap     = document.createElement('span');
       groupWrap.className = 'ts-group-select-wrap';
-      groupWrap.style.display = 'none';   // hidden until groups exist
+      groupWrap.style.display = 'none';
 
       const groupSel     = document.createElement('select');
       groupSel.className = 'ts-group-select';
@@ -374,7 +475,6 @@ export function initSlurpWindow() {
         this._selectGroup(key);
       });
 
-      // Reload button
       const reloadBtn     = document.createElement('button');
       reloadBtn.type      = 'button';
       reloadBtn.className = 'ts-reload-btn';
@@ -398,7 +498,6 @@ export function initSlurpWindow() {
         await this._refreshGrid(targetDoc);
       });
 
-      // Follow button
       const followBtn     = document.createElement('button');
       followBtn.type      = 'button';
       followBtn.className = 'ts-follow-btn';
@@ -431,7 +530,6 @@ export function initSlurpWindow() {
         await this._refreshGrid(matches[0]);
       });
 
-      // Duration slider + label
       const slider     = document.createElement('input');
       slider.type      = 'range';
       slider.className = 'ts-duration-slider';
@@ -445,7 +543,6 @@ export function initSlurpWindow() {
       durationLabel.className = 'ts-duration-label';
       durationLabel.textContent = `${this._duration}ms`;
 
-      // Animation select
       const animSel     = document.createElement('select');
       animSel.className = 'ts-anim-select';
       animSel.title     = game.i18n.localize('TOKEN_SLURP.window.animation');
@@ -458,7 +555,6 @@ export function initSlurpWindow() {
 
       controls.append(groupWrap, sep, followBtn, reloadBtn, slider, durationLabel, animSel);
 
-      // Prevent Foundry's drag/window-move handlers from swallowing control interactions
       const _stopEvent = ev => { ev.stopPropagation(); ev.stopImmediatePropagation(); };
       for (const node of [slider, animSel, reloadBtn, followBtn, groupSel]) {
         for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart']) {
@@ -504,6 +600,9 @@ export function initSlurpWindow() {
         this._deleteHookId = null;
       }
       clearTimeout(this._refreshTimeout);
+      this._resizeObserver?.disconnect();
+      this._resizeObserver = null;
+      clearTimeout(this._layoutTimeout);
     }
   };
 }

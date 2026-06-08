@@ -55,6 +55,17 @@
         "collapse": "Collapse other groups",
         "top":      "Scroll selected group to top",
         "none":     "No automatic scroll or collapse"
+      },
+      "ui2GroupLayoutCols": {
+        "name": "Window: Group Layout Columns",
+        "hint": "Arrange groups side-by-side in equal columns. Groups with many images automatically span all columns.",
+        "off":   "Off (stacked)",
+        "two":   "2 Columns",
+        "three": "3 Columns"
+      },
+      "ui2GroupBalanceRows": {
+        "name": "Window: Balance Orphan Rows",
+        "hint": "When a group's last row is less than half full, the column count is increased slightly so images are spread more evenly. Cells may shrink up to 30% to make room."
       }
     },
     "tokenConfig": {
