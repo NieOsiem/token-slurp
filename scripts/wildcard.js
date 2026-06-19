@@ -26,7 +26,7 @@ function segmentToRegex(segment) {
 }
 
 function isSupportedMedia(path) {
-  return /\.(png|jpg|jpeg|gif|webp|svg|webm|mp4|ogg)$/i.test(path);
+  return /\.(png|jpg|jpeg|gif|webp|avif|svg|webm|mp4|ogg)$/i.test(path);
 }
 
 // ── Core resolver ─────────────────────────────────────────────────────────────
