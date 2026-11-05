@@ -127,6 +127,12 @@ export function buildTokenImageUpdate(tokenDoc, newSrc) {
   const proto    = tokenDoc.actor?.prototypeToken;
   const data     = { 'texture.src': newSrc };
 
+  // Mirror state (e.g. Fast Flip) lives in the *sign* of texture.scaleX/Y.
+  // Overwriting the magnitude must not lose the sign.
+  const sgn    = v => (v < 0 ? -1 : 1);
+  const signX  = sgn(tokenDoc.texture?.scaleX ?? 1);
+  const signY  = sgn(tokenDoc.texture?.scaleY ?? 1);
+
   if ('name' in newMeta) {
     data.name = newMeta.name;
   } else if ('name' in prevMeta && proto !== undefined) {
@@ -144,12 +150,12 @@ export function buildTokenImageUpdate(tokenDoc, newSrc) {
   if ('scale' in newMeta) {
     const scale = parseFloat(newMeta.scale);
     if (!isNaN(scale) && scale > 0) {
-      data['texture.scaleX'] = scale;
-      data['texture.scaleY'] = scale;
+      data['texture.scaleX'] = signX * scale;
+      data['texture.scaleY'] = signY * scale;
     }
   } else if ('scale' in prevMeta && proto !== undefined) {
-    data['texture.scaleX'] = proto.texture?.scaleX ?? 1;
-    data['texture.scaleY'] = proto.texture?.scaleY ?? 1;
+    data['texture.scaleX'] = signX * (proto.texture?.scaleX ?? 1);
+    data['texture.scaleY'] = signY * (proto.texture?.scaleY ?? 1);
   }
 
   return data;
