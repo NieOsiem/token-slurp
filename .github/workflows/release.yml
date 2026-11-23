@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tag and manifest
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$tag' is not valid semver (expected vMAJOR.MINOR.PATCH)."
+            exit 1
+          fi
+
+          manifest_version="$(jq -r '.version' module.json)"
+          if [[ "$manifest_version" != "$version" ]]; then
+            echo "::error::Tag '$tag' does not match module.json version '$manifest_version'."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          tag="$GITHUB_REF_NAME"
+          repo="$GITHUB_REPOSITORY"
+          staging="$(mktemp -d)"
+
+          cp module.json "$staging/module.json"
+          jq \
+            --arg version "$version" \
+            --arg manifest "https://github.com/$repo/releases/latest/download/module.json" \
+            --arg download "https://github.com/$repo/releases/download/$tag/token-slurp.zip" \
+            '.version = $version | .manifest = $manifest | .download = $download' \
+            "$staging/module.json" > "$staging/module.tmp.json"
+          mv "$staging/module.tmp.json" "$staging/module.json"
+
+          cp README.md LICENSE "$staging/"
+          cp -R scripts styles templates lang "$staging/"
+
+          (cd "$staging" && zip -r -q -X "$GITHUB_WORKSPACE/token-slurp.zip" .)
+          cp "$staging/module.json" "$GITHUB_WORKSPACE/module.json"
+
+          unzip -Z1 token-slurp.zip | grep -qx 'module.json' || {
+            echo "::error::module.json is not at the zip root."
+            exit 1
+          }
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          title="Token Slurp v${{ steps.version.outputs.version }}"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" module.json token-slurp.zip \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" module.json token-slurp.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --generate-notes
+          fi

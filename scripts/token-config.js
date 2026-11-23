@@ -5,7 +5,7 @@ export function registerTokenConfigHooks() {
   Hooks.on('renderPrototypeTokenConfig', _onRenderTokenConfig);
 }
 
-// In Foundry v13 the hook receives (app, jQuery, data).
+// In Foundry v12 and v13 the hook receives (app, jQuery, data).
 // In Foundry v14 TokenConfig is ApplicationV2 and receives (app, HTMLElement, data).
 async function _onRenderTokenConfig(app, html, _data) {
   const token = app.document ?? app.token ?? app.object;
@@ -59,4 +59,6 @@ async function _onRenderTokenConfig(app, html, _data) {
     const tab = root.querySelector('.tab[data-tab="appearance"]');
     if (tab) tab.prepend(fragment);
   }
+
+  app.setPosition?.({ height: 'auto' });
 }
