@@ -49,13 +49,6 @@
         "name": "Window: Name Group Minimum",
         "hint": "Minimum number of files a name group must contain to be shown as a group. Files in smaller groups are placed in Ungrouped."
       },
-      "ui2GroupCollapseMode": {
-        "name": "Window: Group Selection Behaviour",
-        "hint": "What happens when a group is selected from the dropdown.",
-        "collapse": "Collapse other groups",
-        "top":      "Scroll selected group to top",
-        "none":     "No automatic scroll or collapse"
-      },
       "ui2GroupLayoutCols": {
         "name": "Window: Group Layout Columns",
         "hint": "Arrange groups side-by-side in equal columns. Groups with many images automatically span all columns.",
@@ -91,8 +84,6 @@
       "loading":        "Loading…",
       "reloadSelected": "Reload for selected token",
       "followScene":    "Follow token to active scene",
-      "groupAll":       "All groups",
-      "groupSelect":    "Jump to group",
       "groupUngrouped": "Ungrouped"
     },
     "animation": {

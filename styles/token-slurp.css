@@ -285,28 +285,86 @@
   display: none;
 }
 
-.ts-header-controls input,
-.ts-header-controls select {
+.ts-header-controls input {
   pointer-events: auto;
   touch-action: pan-x pan-y;
   user-select: none;
   -webkit-user-drag: none;
 }
 
-.ts-group-select-wrap {
-  display: flex;
-  align-items: center;
+.ts-duration-wrap,
+.ts-anim-wrap {
+  position: relative;
+  display: inline-flex;
   flex-shrink: 0;
 }
 
-.ts-group-select {
-  max-width: 120px !important;
-  width: 120px !important;
+.ts-duration-btn,
+.ts-anim-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
+  padding: 2px 6px !important;
   font-size: 0.8em;
+  white-space: nowrap;
   cursor: pointer;
   -webkit-user-drag: none;
   -webkit-app-region: no-drag;
+}
+
+.ts-anim-btn .ts-anim-label {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ts-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(20, 20, 22, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+
+.ts-popover[hidden] {
+  display: none;
+}
+
+.ts-duration-pop {
+  align-items: center;
+  padding: 8px;
+}
+
+.ts-anim-menu {
+  min-width: 140px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ts-anim-option {
+  width: 100% !important;
+  padding: 3px 8px !important;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 0.8em;
+}
+
+.ts-anim-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ts-anim-option--active {
+  color: var(--color-border-highlight, #ff6400);
+  font-weight: 600;
 }
 
 .ts-duration-slider {
@@ -318,26 +376,6 @@
   cursor: ew-resize;
   -webkit-user-drag: none;
   -webkit-app-region: no-drag;
-}
-
-.ts-anim-select {
-  width: 140px !important;
-  max-width: 140px !important;
-  flex-shrink: 0;
-  font-size: 0.8em;
-  touch-action: manipulation;
-  user-select: none;
-  cursor: pointer;
-  -webkit-user-drag: none;
-  -webkit-app-region: no-drag;
-}
-
-.ts-duration-label {
-  font-size: 0.75em;
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-width: 38px;
-  text-align: right;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────── */
@@ -473,16 +511,6 @@
   0%   { transform: scale(1);    }
   50%  { transform: scale(1.04); }
   100% { transform: scale(1);    }
-}
-
-.ts-controls-sep {
-  display: inline-block;
-  width: 1px;
-  height: 1.2em;
-  background: rgba(255, 255, 255, 0.2);
-  flex-shrink: 0;
-  align-self: center;
-  margin: 0 2px;
 }
 
 .ts-reload-btn,

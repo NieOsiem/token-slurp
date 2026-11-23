@@ -23,7 +23,6 @@ export const SETTINGS = {
   // Grouping
   UI2_GROUP_NAME_ENABLED:   'ui2GroupNameEnabled',
   UI2_GROUP_NAME_MIN_COUNT: 'ui2GroupNameMinCount',
-  UI2_GROUP_COLLAPSE_MODE:  'ui2GroupCollapseMode',
   UI2_GROUP_LAYOUT_COLS:    'ui2GroupLayoutCols',
   UI2_GROUP_BALANCE_ROWS:   'ui2GroupBalanceRows',
 };
@@ -46,7 +45,7 @@ export function registerSettings() {
     scope:   'world',
     config:  true,
     type:    Number,
-    default: 320,
+    default: 640,
     range:   { min: 256, max: 768, step: 64 },
   });
 
@@ -62,13 +61,13 @@ export function registerSettings() {
       range:   { min, max, step },
     });
 
-  const clientZoomOrigin = (key, name, hint) =>
+  const clientZoomOrigin = (key, name, hint, def = 'center center') =>
     game.settings.register(MODULE_ID, key, {
       name, hint,
       scope:   'client',
       config:  true,
       type:    String,
-      default: 'center center',
+      default: def,
       choices: {
         'center center': 'TOKEN_SLURP.settings.zoomOrigin.center',
         'center top':    'TOKEN_SLURP.settings.zoomOrigin.top',
@@ -83,20 +82,20 @@ export function registerSettings() {
     });
 
   // UI1 — quick HUD picker
-  clientNum(SETTINGS.UI1_COLS,        'TOKEN_SLURP.settings.ui1Cols.name',        'TOKEN_SLURP.settings.ui1Cols.hint',         8,   1,  20);
-  clientNum(SETTINGS.UI1_ROWS,        'TOKEN_SLURP.settings.ui1Rows.name',        'TOKEN_SLURP.settings.ui1Rows.hint',         7,   1,  20);
+  clientNum(SETTINGS.UI1_COLS,        'TOKEN_SLURP.settings.ui1Cols.name',        'TOKEN_SLURP.settings.ui1Cols.hint',         6,   1,  20);
+  clientNum(SETTINGS.UI1_ROWS,        'TOKEN_SLURP.settings.ui1Rows.name',        'TOKEN_SLURP.settings.ui1Rows.hint',         6,   1,  20);
   clientNum(SETTINGS.UI1_CELL_WIDTH,  'TOKEN_SLURP.settings.ui1CellWidth.name',   'TOKEN_SLURP.settings.ui1CellWidth.hint',   80,  50, 512);
   clientNum(SETTINGS.UI1_CELL_HEIGHT, 'TOKEN_SLURP.settings.ui1CellHeight.name',  'TOKEN_SLURP.settings.ui1CellHeight.hint',  80,  50, 512);
   clientNum(SETTINGS.UI1_ZOOM,        'TOKEN_SLURP.settings.ui1Zoom.name',        'TOKEN_SLURP.settings.ui1Zoom.hint',        1.0, 1.0, 2.0, 0.1);
-  clientZoomOrigin(SETTINGS.UI1_ZOOM_ORIGIN, 'TOKEN_SLURP.settings.ui1ZoomOrigin.name', 'TOKEN_SLURP.settings.ui1ZoomOrigin.hint');
+  clientZoomOrigin(SETTINGS.UI1_ZOOM_ORIGIN, 'TOKEN_SLURP.settings.ui1ZoomOrigin.name', 'TOKEN_SLURP.settings.ui1ZoomOrigin.hint', 'center top');
 
   // UI2 — resizeable window
   clientNum(SETTINGS.UI2_CELL_WIDTH,   'TOKEN_SLURP.settings.ui2CellWidth.name',   'TOKEN_SLURP.settings.ui2CellWidth.hint',  140,  50, 512);
   clientNum(SETTINGS.UI2_CELL_HEIGHT,  'TOKEN_SLURP.settings.ui2CellHeight.name',  'TOKEN_SLURP.settings.ui2CellHeight.hint', 180,  50, 512);
-  clientNum(SETTINGS.UI2_DEFAULT_COLS, 'TOKEN_SLURP.settings.ui2DefaultCols.name', 'TOKEN_SLURP.settings.ui2DefaultCols.hint',  5,   1,  20);
-  clientNum(SETTINGS.UI2_DEFAULT_ROWS, 'TOKEN_SLURP.settings.ui2DefaultRows.name', 'TOKEN_SLURP.settings.ui2DefaultRows.hint',  3,   1,  20);
-  clientNum(SETTINGS.UI2_ZOOM,         'TOKEN_SLURP.settings.ui2Zoom.name',        'TOKEN_SLURP.settings.ui2Zoom.hint',        1.0, 1.0, 2.0, 0.1);
-  clientZoomOrigin(SETTINGS.UI2_ZOOM_ORIGIN, 'TOKEN_SLURP.settings.ui2ZoomOrigin.name', 'TOKEN_SLURP.settings.ui2ZoomOrigin.hint');
+  clientNum(SETTINGS.UI2_DEFAULT_COLS, 'TOKEN_SLURP.settings.ui2DefaultCols.name', 'TOKEN_SLURP.settings.ui2DefaultCols.hint',  6,   1,  20);
+  clientNum(SETTINGS.UI2_DEFAULT_ROWS, 'TOKEN_SLURP.settings.ui2DefaultRows.name', 'TOKEN_SLURP.settings.ui2DefaultRows.hint',  5,   1,  20);
+  clientNum(SETTINGS.UI2_ZOOM,         'TOKEN_SLURP.settings.ui2Zoom.name',        'TOKEN_SLURP.settings.ui2Zoom.hint',        1.3, 1.0, 2.0, 0.1);
+  clientZoomOrigin(SETTINGS.UI2_ZOOM_ORIGIN, 'TOKEN_SLURP.settings.ui2ZoomOrigin.name', 'TOKEN_SLURP.settings.ui2ZoomOrigin.hint', 'center top');
 
   game.settings.register(MODULE_ID, SETTINGS.UI2_SHOW_META_OVERLAY, {
     name:    'TOKEN_SLURP.settings.ui2ShowMetaOverlay.name',
@@ -125,20 +124,6 @@ export function registerSettings() {
     3, 2, 20,
   );
 
-  game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_COLLAPSE_MODE, {
-    name:    'TOKEN_SLURP.settings.ui2GroupCollapseMode.name',
-    hint:    'TOKEN_SLURP.settings.ui2GroupCollapseMode.hint',
-    scope:   'client',
-    config:  true,
-    type:    String,
-    default: 'collapse',
-    choices: {
-      collapse: 'TOKEN_SLURP.settings.ui2GroupCollapseMode.collapse',
-      top:      'TOKEN_SLURP.settings.ui2GroupCollapseMode.top',
-      none:     'TOKEN_SLURP.settings.ui2GroupCollapseMode.none',
-    },
-  });
-
   game.settings.register(MODULE_ID, SETTINGS.UI2_GROUP_LAYOUT_COLS, {
     name:    'TOKEN_SLURP.settings.ui2GroupLayoutCols.name',
     hint:    'TOKEN_SLURP.settings.ui2GroupLayoutCols.hint',
@@ -159,7 +144,7 @@ export function registerSettings() {
     scope:   'client',
     config:  true,
     type:    Boolean,
-    default: false,
+    default: true,
   });
 
   // ── Hidden persisted state ───────────────────────────────────────────────

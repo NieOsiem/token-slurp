@@ -1,7 +1,7 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
 import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups, balancedCols } from './grid.js';
-import { resolveDisplayUrlsProgressive, shouldUseThumb, parseFilenameMetadata } from './wildcard.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb } from './wildcard.js';
 
 let _SlurpWindowClass = null;
 
@@ -33,7 +33,6 @@ export function initSlurpWindow() {
       this.tokenDoc            = token.document;
       this._files              = [];
       this._groups             = [];
-      this._activeGroupKey     = null;
       this._displayMap         = new Map();
       this._pinned             = false;
       this._animation          = getSetting(SETTINGS.UI2_ANIMATION);
@@ -105,7 +104,6 @@ export function initSlurpWindow() {
       }
 
       this._syncTitle();
-      this._activeGroupKey = null;
 
       const container = el.querySelector('.ts-grid-container');
       if (!container) return;
@@ -116,7 +114,6 @@ export function initSlurpWindow() {
 
       if (!tokenData) {
         this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`);
-        this._updateGroupSelector([]);
         return;
       }
 
@@ -128,8 +125,6 @@ export function initSlurpWindow() {
       const nameGroupMinCount = getSetting(SETTINGS.UI2_GROUP_NAME_MIN_COUNT);
       const { groups, hasGroups } = computeGroups(files, { nameGroupEnabled, nameGroupMinCount });
       this._groups = groups;
-
-      this._updateGroupSelector(hasGroups ? groups : []);
 
       const generation = ++this._gridGeneration;
 
@@ -174,105 +169,12 @@ export function initSlurpWindow() {
         });
       }
 
-      if (hasGroups) this._autoSelectGroup(currentSrc);
       requestAnimationFrame(() => this._reapplyGroupLayout());
     }
 
     _setGridContent(html) {
       const container = this.element?.querySelector('.ts-grid-container');
       if (container) container.innerHTML = html;
-    }
-
-    // ── Group management ──────────────────────────────────────────────────────
-
-    _updateGroupSelector(groups) {
-      const sel = this.element?.querySelector('.ts-group-select');
-      if (!sel) return;
-
-      const wrap = sel.closest('.ts-group-select-wrap');
-
-      if (!groups.length) {
-        if (wrap) wrap.style.display = 'none';
-        return;
-      }
-
-      if (wrap) wrap.style.display = '';
-
-      sel.innerHTML = `<option value="">${game.i18n.localize('TOKEN_SLURP.window.groupAll')}</option>`;
-      for (const g of groups) {
-        const opt   = document.createElement('option');
-        opt.value   = g.key;
-        opt.textContent = g.label;
-        sel.appendChild(opt);
-      }
-      sel.value = '';
-    }
-
-    _selectGroup(groupKey) {
-      this._activeGroupKey = groupKey;
-
-      const collapseMode = getSetting(SETTINGS.UI2_GROUP_COLLAPSE_MODE);
-      const container    = this.element?.querySelector('.ts-grid-container');
-      if (!container) return;
-
-      if (groupKey === null) {
-        for (const { el } of this._groupElements.values()) {
-          el.classList.remove('ts-group--collapsed');
-        }
-        container.scrollTop = 0;
-        return;
-      }
-
-      if (collapseMode === 'collapse') {
-        for (const [key, { el }] of this._groupElements) {
-          el.classList.toggle('ts-group--collapsed', key !== groupKey);
-        }
-      }
-
-      requestAnimationFrame(() => {
-        const targetEntry = this._groupElements.get(groupKey);
-        if (!targetEntry) return;
-
-        if (collapseMode === 'top' || collapseMode === 'none') {
-          const containerTop = container.getBoundingClientRect().top;
-          const headerTop    = targetEntry.el.getBoundingClientRect().top;
-          container.scrollTop += headerTop - containerTop;
-        } else {
-          container.scrollTop = 0;
-        }
-      });
-    }
-
-    _autoSelectGroup(currentSrc) {
-      if (!this._groups.length) return;
-
-      let targetKey = null;
-
-      if (currentSrc) {
-        const meta = parseFilenameMetadata(currentSrc);
-        if (meta.group) {
-          const found = this._groups.find(g => g.key === meta.group);
-          if (found) targetKey = found.key;
-        }
-      }
-
-      if (!targetKey) {
-        const tokenName = this.tokenDoc?.name?.toLowerCase() ?? '';
-        const matched   = this._groups.find(
-          g => g.key !== '__ungrouped__' && g.label.toLowerCase() === tokenName
-        );
-        if (matched) targetKey = matched.key;
-      }
-
-      if (!targetKey) {
-        const ungrouped = this._groups.find(g => g.key === '__ungrouped__');
-        if (ungrouped?.files.includes(currentSrc)) targetKey = '__ungrouped__';
-      }
-
-      const sel = this.element?.querySelector('.ts-group-select');
-      if (sel) sel.value = targetKey;
-
-      this._selectGroup(targetKey);
     }
 
     // ── Group layout (tiling + row balancing) ─────────────────────────────────
@@ -461,20 +363,6 @@ export function initSlurpWindow() {
       const controls     = document.createElement('div');
       controls.className = 'ts-header-controls';
 
-      const groupWrap     = document.createElement('span');
-      groupWrap.className = 'ts-group-select-wrap';
-      groupWrap.style.display = 'none';
-
-      const groupSel     = document.createElement('select');
-      groupSel.className = 'ts-group-select';
-      groupSel.title     = game.i18n.localize('TOKEN_SLURP.window.groupSelect');
-      groupWrap.appendChild(groupSel);
-
-      groupSel.addEventListener('change', () => {
-        const key = groupSel.value || null;
-        this._selectGroup(key);
-      });
-
       const reloadBtn     = document.createElement('button');
       reloadBtn.type      = 'button';
       reloadBtn.className = 'ts-reload-btn';
@@ -530,6 +418,15 @@ export function initSlurpWindow() {
         await this._refreshGrid(matches[0]);
       });
 
+      // Duration: compact readout that expands into the slider on click.
+      const durationWrap = document.createElement('span');
+      durationWrap.className = 'ts-duration-wrap';
+
+      const durationBtn     = document.createElement('button');
+      durationBtn.type      = 'button';
+      durationBtn.className = 'ts-duration-btn';
+      durationBtn.title     = game.i18n.localize('TOKEN_SLURP.window.duration');
+
       const slider     = document.createElement('input');
       slider.type      = 'range';
       slider.className = 'ts-duration-slider';
@@ -537,26 +434,49 @@ export function initSlurpWindow() {
       slider.max       = '3000';
       slider.step      = '100';
       slider.value     = String(this._duration);
-      slider.title     = game.i18n.localize('TOKEN_SLURP.window.duration');
 
-      const durationLabel     = document.createElement('span');
-      durationLabel.className = 'ts-duration-label';
-      durationLabel.textContent = `${this._duration}ms`;
+      const durationPop     = document.createElement('div');
+      durationPop.className = 'ts-popover ts-duration-pop';
+      durationPop.hidden    = true;
+      durationPop.appendChild(slider);
 
-      const animSel     = document.createElement('select');
-      animSel.className = 'ts-anim-select';
-      animSel.title     = game.i18n.localize('TOKEN_SLURP.window.animation');
-      animSel.innerHTML = ANIMATION_OPTIONS.map(o =>
-        `<option value="${o.value}"${o.value === this._animation ? ' selected' : ''}>${game.i18n.localize(o.label)}</option>`
-      ).join('');
+      durationWrap.append(durationBtn, durationPop);
 
-      const sep     = document.createElement('span');
-      sep.className = 'ts-controls-sep';
+      // Animation: button showing the current mode, expanding into the option list.
+      const animWrap     = document.createElement('span');
+      animWrap.className = 'ts-anim-wrap';
 
-      controls.append(groupWrap, sep, followBtn, reloadBtn, slider, durationLabel, animSel);
+      const animBtn     = document.createElement('button');
+      animBtn.type      = 'button';
+      animBtn.className = 'ts-anim-btn';
+      animBtn.title     = game.i18n.localize('TOKEN_SLURP.window.animation');
+      animBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i><span class="ts-anim-label"></span>';
+
+      const animMenu     = document.createElement('div');
+      animMenu.className = 'ts-popover ts-anim-menu';
+      animMenu.hidden    = true;
+
+      for (const opt of ANIMATION_OPTIONS) {
+        const item         = document.createElement('button');
+        item.type          = 'button';
+        item.className     = 'ts-anim-option';
+        item.dataset.value = opt.value;
+        item.textContent   = game.i18n.localize(opt.label);
+        item.addEventListener('click', () => {
+          this._animation = opt.value;
+          setSetting(SETTINGS.UI2_ANIMATION, this._animation);
+          this._syncAnimationUI();
+          this._closeHeaderPopovers();
+        });
+        animMenu.appendChild(item);
+      }
+
+      animWrap.append(animBtn, animMenu);
+
+      controls.append(followBtn, reloadBtn, durationWrap, animWrap);
 
       const _stopEvent = ev => { ev.stopPropagation(); ev.stopImmediatePropagation(); };
-      for (const node of [slider, animSel, reloadBtn, followBtn, groupSel]) {
+      for (const node of [slider, animBtn, durationBtn, reloadBtn, followBtn, animMenu, durationPop]) {
         for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart']) {
           node.addEventListener(evName, _stopEvent, { capture: true });
         }
@@ -564,24 +484,65 @@ export function initSlurpWindow() {
         node.style.webkitAppRegion = 'no-drag';
       }
 
-      const syncSliderVisibility = (value) => {
-        const instant = value === 'none';
-        slider.style.display       = instant ? 'none' : '';
-        durationLabel.style.display = instant ? 'none' : '';
+      this._closeHeaderPopovers = () => {
+        animMenu.hidden    = true;
+        durationPop.hidden = true;
       };
-      syncSliderVisibility(this._animation);
 
-      animSel.addEventListener('change', ev => {
-        this._animation = ev.currentTarget.value;
-        setSetting(SETTINGS.UI2_ANIMATION, this._animation);
-        syncSliderVisibility(this._animation);
+      this._syncAnimationUI = () => {
+        const current = ANIMATION_OPTIONS.find(o => o.value === this._animation) ?? ANIMATION_OPTIONS[0];
+        animBtn.querySelector('.ts-anim-label').textContent = game.i18n.localize(current.label);
+
+        for (const item of animMenu.children) {
+          item.classList.toggle('ts-anim-option--active', item.dataset.value === this._animation);
+        }
+
+        const instant = this._animation === 'none';
+        durationWrap.style.display = instant ? 'none' : '';
+        if (instant) durationPop.hidden = true;
+        durationBtn.textContent = `${this._duration}ms`;
+      };
+      this._syncAnimationUI();
+
+      animBtn.addEventListener('click', () => {
+        const open = animMenu.hidden;
+        this._closeHeaderPopovers();
+        animMenu.hidden = !open;
+      });
+
+      durationBtn.addEventListener('click', () => {
+        const open = durationPop.hidden;
+        this._closeHeaderPopovers();
+        durationPop.hidden = !open;
       });
 
       slider.addEventListener('input', ev => {
         this._duration = Number(ev.currentTarget.value);
         setSetting(SETTINGS.UI2_DURATION, this._duration);
-        durationLabel.textContent = `${this._duration}ms`;
+        durationBtn.textContent = `${this._duration}ms`;
       });
+
+      if (this._headerDocListener) {
+        document.removeEventListener('pointerdown', this._headerDocListener, true);
+      }
+      if (this._headerEscListener) {
+        document.removeEventListener('keydown', this._headerEscListener, true);
+      }
+
+      this._headerDocListener = ev => {
+        if (!controls.contains(ev.target)) this._closeHeaderPopovers();
+      };
+      document.addEventListener('pointerdown', this._headerDocListener, true);
+
+      this._headerEscListener = ev => {
+        if (ev.key !== 'Escape') return;
+        if (animMenu.hidden && durationPop.hidden) return;
+        // Keep Foundry's global Escape handler from closing the window underneath.
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._closeHeaderPopovers();
+      };
+      document.addEventListener('keydown', this._headerEscListener, true);
 
       const firstFoundryBtn = header.querySelector('.header-control, [data-action="close"]');
       if (firstFoundryBtn) header.insertBefore(controls, firstFoundryBtn);
@@ -603,6 +564,15 @@ export function initSlurpWindow() {
       this._resizeObserver?.disconnect();
       this._resizeObserver = null;
       clearTimeout(this._layoutTimeout);
+
+      if (this._headerDocListener) {
+        document.removeEventListener('pointerdown', this._headerDocListener, true);
+        this._headerDocListener = null;
+      }
+      if (this._headerEscListener) {
+        document.removeEventListener('keydown', this._headerEscListener, true);
+        this._headerEscListener = null;
+      }
     }
   };
 }
