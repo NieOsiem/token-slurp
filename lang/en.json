@@ -84,7 +84,11 @@
       "loading":        "Loading…",
       "reloadSelected": "Reload for selected token",
       "followScene":    "Follow token to active scene",
-      "groupUngrouped": "Ungrouped"
+      "groupUngrouped": "Ungrouped",
+      "favorites":      "Favourites",
+      "favoritePin":    "Pin to favourites",
+      "favoriteUnpin":  "Unpin from favourites",
+      "favoritesEmpty": "No favourites yet — hover an image and click ★ to pin it."
     },
     "animation": {
       "instant":    "Instant",
@@ -108,7 +112,8 @@
       "followNoActor":  "Token Slurp: current token has no actor or wildcard path to match against.",
       "followNoMatch":  "Token Slurp: no matching token found in the active scene.",
       "followMultiple": "Token Slurp: multiple matching tokens found — cannot determine which one to follow.",
-      "tokenDeleted":   "Token Slurp: tracked token got deleted. Select or track new one."
+      "tokenDeleted":   "Token Slurp: tracked token got deleted. Select or track new one.",
+      "favoriteLimit":  "Token Slurp: you can pin at most 10 favourites."
     },
     "thumbCleaner": {
       "title":           "Thumbnail Cleaner",

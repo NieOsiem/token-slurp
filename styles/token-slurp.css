@@ -51,6 +51,42 @@
   box-shadow: 0 0 6px 1px rgba(240, 215, 85, 0.5);
 }
 
+.ts-fav-toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, transform 0.12s;
+  cursor: pointer;
+}
+
+.ts-cell:hover .ts-fav-toggle,
+.ts-cell--fav .ts-fav-toggle,
+.ts-fav-toggle:focus-visible {
+  opacity: 1;
+}
+
+.ts-cell--fav .ts-fav-toggle {
+  color: #f0d755;
+}
+
+.ts-fav-toggle:hover {
+  transform: scale(1.1);
+}
+
 .ts-cell img,
 .ts-cell video {
   width: 100%;
@@ -293,14 +329,16 @@
 }
 
 .ts-duration-wrap,
-.ts-anim-wrap {
+.ts-anim-wrap,
+.ts-fav-wrap {
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
 }
 
 .ts-duration-btn,
-.ts-anim-btn {
+.ts-anim-btn,
+.ts-fav-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -311,6 +349,11 @@
   cursor: pointer;
   -webkit-user-drag: none;
   -webkit-app-region: no-drag;
+}
+
+.ts-fav-count {
+  font-size: 0.9em;
+  opacity: 0.8;
 }
 
 .ts-anim-btn .ts-anim-label {
@@ -341,6 +384,96 @@
 .ts-duration-pop {
   align-items: center;
   padding: 8px;
+}
+
+.ts-fav-pop {
+  min-width: 200px;
+  padding: 6px;
+}
+
+.ts-fav-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 44px);
+  gap: 3px;
+}
+
+.ts-fav-slot {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.ts-fav-pick {
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.ts-fav-pick:hover {
+  border-color: var(--color-border-highlight, #ff6400) !important;
+}
+
+.ts-fav-pick img,
+.ts-fav-pick video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.ts-fav-loading {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: ts-shimmer 1.4s ease-in-out infinite;
+}
+
+.ts-fav-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px !important;
+  height: 16px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  background: rgba(20, 20, 22, 0.95) !important;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.12s;
+  cursor: pointer;
+}
+
+.ts-fav-slot:hover .ts-fav-remove,
+.ts-fav-remove:focus-visible {
+  opacity: 1;
+}
+
+.ts-fav-empty {
+  padding: 2px 2px 0;
+  font-size: 0.78em;
+  line-height: 1.3;
+  opacity: 0.75;
+  max-width: 230px;
 }
 
 .ts-anim-menu {

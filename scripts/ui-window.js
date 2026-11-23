@@ -1,9 +1,37 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
 import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups, balancedCols } from './grid.js';
-import { resolveDisplayUrlsProgressive, shouldUseThumb } from './wildcard.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb, isVideo } from './wildcard.js';
+import { getFavorites, toggleFavorite, pruneFavorites } from './favorites.js';
 
 let _SlurpWindowClass = null;
+
+function buildFavMedia(url) {
+  if (!url) {
+    const loading = document.createElement('span');
+    loading.className = 'ts-fav-loading';
+    return loading;
+  }
+
+  // Thumbnails are webp stills even for video sources; originals are not.
+  if (isVideo(url)) {
+    const vid = document.createElement('video');
+    vid.src = url;
+    vid.muted = true;
+    vid.preload = 'metadata';
+    vid.playsInline = true;
+    vid.addEventListener('loadedmetadata', () => {
+      try { vid.currentTime = Math.min(0.1, (vid.duration || 1) * 0.1); } catch { /* seeking may fail */ }
+    }, { once: true });
+    return vid;
+  }
+
+  const img = document.createElement('img');
+  img.src = url;
+  img.loading = 'lazy';
+  img.draggable = false;
+  return img;
+}
 
 export function initSlurpWindow() {
   const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -44,6 +72,12 @@ export function initSlurpWindow() {
       this._groupElements      = new Map();
       this._resizeObserver     = null;
       this._layoutTimeout      = null;
+      this._favScope           = null;
+      this._favoritePaths      = new Set();
+      this._favElements        = new Map();
+      this._favPinned          = false;
+      this._favOpenTimer       = null;
+      this._favCloseTimer      = null;
     }
 
     get title() {
@@ -100,6 +134,10 @@ export function initSlurpWindow() {
       } else if (!newTokenDoc && !this._isTokenValid()) {
         this._gridGeneration++;
         this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted')}</p>`);
+        this._files = [];
+        this._favScope = null;
+        this._favoritePaths = new Set();
+        this._renderFavorites();
         return;
       }
 
@@ -114,12 +152,31 @@ export function initSlurpWindow() {
 
       if (!tokenData) {
         this._setGridContent(`<p class="ts-empty">${game.i18n.localize('TOKEN_SLURP.notifications.noImages')}</p>`);
+        this._files = [];
+        this._favScope = null;
+        this._favoritePaths = new Set();
+        this._renderFavorites();
         return;
       }
 
       const { files, currentSrc, thumbMode } = tokenData;
       this._files      = files;
       this._displayMap = new Map();
+
+      this._favScope = this.tokenDoc.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH] ?? null;
+      const fileSet = new Set(files);
+      const storedFavorites = this._favScope ? getFavorites(this._favScope) : [];
+      const visibleFavorites = storedFavorites.filter(p => fileSet.has(p));
+
+      if (storedFavorites.length !== visibleFavorites.length) {
+        try {
+          await pruneFavorites(this._favScope, fileSet);
+        } catch (err) {
+          console.warn(`[${MODULE_ID}] Could not prune stale favourites:`, err);
+        }
+      }
+
+      this._favoritePaths = new Set(visibleFavorites);
 
       const nameGroupEnabled  = getSetting(SETTINGS.UI2_GROUP_NAME_ENABLED);
       const nameGroupMinCount = getSetting(SETTINGS.UI2_GROUP_NAME_MIN_COUNT);
@@ -145,18 +202,14 @@ export function initSlurpWindow() {
         zoomOrigin,
         showMetaOverlay,
         groups:      hasGroups ? groups : undefined,
-        onSelect: async (filePath) => {
-          if (!this._isTokenValid()) {
-            ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
-            return;
-          }
-          await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
-          if (!this._pinned) this.close();
-        },
+        favoritePaths:    this._favoritePaths,
+        onToggleFavorite: (filePath) => this._toggleFavorite(filePath),
+        onSelect: (filePath) => this._selectFile(filePath),
       };
 
       if (!shouldUseThumb(files.length, thumbMode)) {
-        const { groupElements } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map(files.map(f => [f, f])) });
+        this._displayMap = new Map(files.map(f => [f, f]));
+        const { groupElements } = renderImageGrid({ ...sharedGridOpts, displayMap: this._displayMap });
         this._groupElements = groupElements;
       } else {
         const { updateCellDisplay, groupElements } = renderImageGrid({ ...sharedGridOpts, displayMap: new Map() });
@@ -166,15 +219,108 @@ export function initSlurpWindow() {
           if (this._gridGeneration !== generation) return;
           this._displayMap.set(filePath, url);
           updateCellDisplay(filePath, url);
+          this._updateFavoriteThumb(filePath, url);
         });
       }
 
+      this._renderFavorites();
       requestAnimationFrame(() => this._reapplyGroupLayout());
     }
 
     _setGridContent(html) {
       const container = this.element?.querySelector('.ts-grid-container');
       if (container) container.innerHTML = html;
+    }
+
+    async _selectFile(filePath) {
+      if (!this._isTokenValid()) {
+        ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.tokenDeleted'));
+        return;
+      }
+      this._syncActiveCell(filePath);
+      await switchTokenImage(this.tokenDoc, filePath, this._animation, this._duration);
+      if (!this._pinned) this.close();
+    }
+
+    // ── Favourites ────────────────────────────────────────────────────────────
+
+    async _toggleFavorite(filePath) {
+      if (!this._favScope) return;
+
+      const result = await toggleFavorite(this._favScope, filePath);
+      if (result.limitReached) {
+        ui.notifications.warn(game.i18n.localize('TOKEN_SLURP.notifications.favoriteLimit'));
+        return;
+      }
+
+      const fileSet = new Set(this._files);
+      this._favoritePaths = new Set(result.favorites.filter(p => fileSet.has(p)));
+      this._syncFavoriteCells();
+      this._renderFavorites();
+    }
+
+    _syncFavoriteCells() {
+      const el = this.element;
+      if (!el) return;
+
+      for (const cell of el.querySelectorAll('.ts-cell[data-src]')) {
+        const isFav = this._favoritePaths.has(cell.dataset.src);
+        cell.classList.toggle('ts-cell--fav', isFav);
+
+        const btn = cell.querySelector('.ts-fav-toggle');
+        if (!btn) continue;
+        btn.setAttribute('aria-pressed', String(isFav));
+        btn.title = game.i18n.localize(
+          isFav ? 'TOKEN_SLURP.window.favoriteUnpin' : 'TOKEN_SLURP.window.favoritePin'
+        );
+      }
+    }
+
+    _renderFavorites() {
+      const grid = this._favGrid;
+      if (!grid) return;
+
+      grid.replaceChildren();
+      this._favElements = new Map();
+
+      for (const filePath of this._favoritePaths) {
+        const slot = document.createElement('div');
+        slot.className = 'ts-fav-slot';
+
+        const pick = document.createElement('button');
+        pick.type      = 'button';
+        pick.className = 'ts-fav-pick';
+        pick.title     = filePath.split('/').pop();
+        pick.append(buildFavMedia(this._displayMap.get(filePath) ?? null));
+        pick.addEventListener('click', async ev => {
+          ev.stopPropagation();
+          if (!this._favPinned) this._favPop.hidden = true;
+          await this._selectFile(filePath);
+        });
+
+        const remove = document.createElement('button');
+        remove.type      = 'button';
+        remove.className = 'ts-fav-remove';
+        remove.title     = game.i18n.localize('TOKEN_SLURP.window.favoriteUnpin');
+        remove.innerHTML = '<i class="fas fa-times"></i>';
+        remove.addEventListener('click', async ev => {
+          ev.stopPropagation();
+          await this._toggleFavorite(filePath);
+        });
+
+        slot.append(pick, remove);
+        grid.appendChild(slot);
+        this._favElements.set(filePath, { slot, pick });
+      }
+
+      const count = this._favoritePaths.size;
+      if (this._favCount) this._favCount.textContent = String(count);
+      if (this._favEmpty) this._favEmpty.hidden = count > 0;
+    }
+
+    _updateFavoriteThumb(filePath, url) {
+      const entry = this._favElements.get(filePath);
+      if (entry) entry.pick.replaceChildren(buildFavMedia(url));
     }
 
     // ── Group layout (tiling + row balancing) ─────────────────────────────────
@@ -418,6 +564,77 @@ export function initSlurpWindow() {
         await this._refreshGrid(matches[0]);
       });
 
+      // Favourites: star button with hover/click popover of pinned thumbnails.
+      const favWrap = document.createElement('span');
+      favWrap.className = 'ts-fav-wrap';
+
+      const favBtn = document.createElement('button');
+      favBtn.type      = 'button';
+      favBtn.className = 'ts-fav-btn';
+      favBtn.title     = game.i18n.localize('TOKEN_SLURP.window.favorites');
+      favBtn.innerHTML = '<i class="fas fa-star"></i><span class="ts-fav-count">0</span>';
+
+      const favPop = document.createElement('div');
+      favPop.className = 'ts-popover ts-fav-pop';
+      favPop.hidden    = true;
+
+      const favGrid = document.createElement('div');
+      favGrid.className = 'ts-fav-grid';
+
+      const favEmpty = document.createElement('div');
+      favEmpty.className = 'ts-fav-empty';
+      favEmpty.textContent = game.i18n.localize('TOKEN_SLURP.window.favoritesEmpty');
+      favEmpty.hidden = true;
+
+      favPop.append(favGrid, favEmpty);
+      favWrap.append(favBtn, favPop);
+
+      this._favPop    = favPop;
+      this._favGrid   = favGrid;
+      this._favCount  = favBtn.querySelector('.ts-fav-count');
+      this._favEmpty  = favEmpty;
+      this._favPinned = false;
+      this._favElements = new Map();
+
+      const FAV_OPEN_DELAY  = 180;
+      const FAV_CLOSE_DELAY = 250;
+
+      favWrap.addEventListener('mouseenter', () => {
+        clearTimeout(this._favCloseTimer);
+        clearTimeout(this._favOpenTimer);
+        this._favOpenTimer = setTimeout(() => {
+          if (!favPop.hidden) return;
+          animMenu.hidden    = true;
+          durationPop.hidden = true;
+          favPop.hidden      = false;
+        }, FAV_OPEN_DELAY);
+      });
+
+      favWrap.addEventListener('mouseleave', () => {
+        clearTimeout(this._favOpenTimer);
+        clearTimeout(this._favCloseTimer);
+        this._favCloseTimer = setTimeout(() => {
+          if (!this._favPinned) favPop.hidden = true;
+        }, FAV_CLOSE_DELAY);
+      });
+
+      favBtn.addEventListener('click', () => {
+        clearTimeout(this._favOpenTimer);
+        clearTimeout(this._favCloseTimer);
+
+        if (favPop.hidden) {
+          this._closeHeaderPopovers();
+          this._favPinned = true;
+          favPop.hidden   = false;
+        } else if (this._favPinned) {
+          this._favPinned = false;
+          favPop.hidden   = true;
+        } else {
+          // Hover-opened popover: clicking pins it open.
+          this._favPinned = true;
+        }
+      });
+
       // Duration: compact readout that expands into the slider on click.
       const durationWrap = document.createElement('span');
       durationWrap.className = 'ts-duration-wrap';
@@ -473,10 +690,10 @@ export function initSlurpWindow() {
 
       animWrap.append(animBtn, animMenu);
 
-      controls.append(followBtn, reloadBtn, durationWrap, animWrap);
+      controls.append(followBtn, reloadBtn, favWrap, durationWrap, animWrap);
 
       const _stopEvent = ev => { ev.stopPropagation(); ev.stopImmediatePropagation(); };
-      for (const node of [slider, animBtn, durationBtn, reloadBtn, followBtn, animMenu, durationPop]) {
+      for (const node of [slider, animBtn, durationBtn, reloadBtn, followBtn, animMenu, durationPop, favBtn, favPop, favGrid]) {
         for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart']) {
           node.addEventListener(evName, _stopEvent, { capture: true });
         }
@@ -487,6 +704,10 @@ export function initSlurpWindow() {
       this._closeHeaderPopovers = () => {
         animMenu.hidden    = true;
         durationPop.hidden = true;
+        favPop.hidden      = true;
+        this._favPinned    = false;
+        clearTimeout(this._favOpenTimer);
+        clearTimeout(this._favCloseTimer);
       };
 
       this._syncAnimationUI = () => {
@@ -536,7 +757,7 @@ export function initSlurpWindow() {
 
       this._headerEscListener = ev => {
         if (ev.key !== 'Escape') return;
-        if (animMenu.hidden && durationPop.hidden) return;
+        if (animMenu.hidden && durationPop.hidden && favPop.hidden) return;
         // Keep Foundry's global Escape handler from closing the window underneath.
         ev.preventDefault();
         ev.stopPropagation();
@@ -561,6 +782,8 @@ export function initSlurpWindow() {
         this._deleteHookId = null;
       }
       clearTimeout(this._refreshTimeout);
+      clearTimeout(this._favOpenTimer);
+      clearTimeout(this._favCloseTimer);
       this._resizeObserver?.disconnect();
       this._resizeObserver = null;
       clearTimeout(this._layoutTimeout);

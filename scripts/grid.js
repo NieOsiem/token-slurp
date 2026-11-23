@@ -196,6 +196,8 @@ export async function switchTokenImage(tokenDoc, newSrc, animation = 'none', dur
  * @param {string}              [opts.zoomOrigin='center center']
  * @param {boolean}             [opts.showMetaOverlay=false]
  * @param {Array}               [opts.groups]         — from computeGroups(); triggers grouped layout
+ * @param {Set<string>}         [opts.favoritePaths]  — enables the per-cell favourite toggle
+ * @param {function}            [opts.onToggleFavorite] — async (filePath) => void
  * @returns {{ updateCellDisplay: function, groupElements: Map }}
  */
 export function renderImageGrid(opts) {
@@ -205,6 +207,8 @@ export function renderImageGrid(opts) {
     zoom = 1, zoomOrigin = 'center center',
     showMetaOverlay = false,
     groups,
+    favoritePaths = null,
+    onToggleFavorite = null,
   } = opts;
 
   container.innerHTML = '';
@@ -237,9 +241,11 @@ export function renderImageGrid(opts) {
     const displayUrl = displayMap.get(filePath);
     const isCurrent  = filePath === currentSrc;
     const vid        = isVideo(filePath);
+    const favoritable = favoritePaths instanceof Set && typeof onToggleFavorite === 'function';
+    const isFavorite  = favoritable && favoritePaths.has(filePath);
 
     const cell       = document.createElement('div');
-    cell.className   = `ts-cell${isCurrent ? ' ts-cell--active' : ''}`;
+    cell.className   = `ts-cell${isCurrent ? ' ts-cell--active' : ''}${isFavorite ? ' ts-cell--fav' : ''}`;
     cell.dataset.src = filePath;
     cell.title       = filePath.split('/').pop();
 
@@ -253,6 +259,24 @@ export function renderImageGrid(opts) {
     }
 
     if (showMetaOverlay) _appendMetaOverlay(cell, filePath);
+
+    if (favoritable) {
+      const favBtn = document.createElement('button');
+      favBtn.type  = 'button';
+      favBtn.className = 'ts-fav-toggle';
+      favBtn.setAttribute('aria-pressed', String(isFavorite));
+      favBtn.title = game.i18n.localize(
+        isFavorite ? 'TOKEN_SLURP.window.favoriteUnpin' : 'TOKEN_SLURP.window.favoritePin'
+      );
+      favBtn.innerHTML = '<i class="fas fa-star"></i>';
+      favBtn.tabIndex = -1;
+      favBtn.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        onToggleFavorite(filePath);
+      });
+      cell.appendChild(favBtn);
+    }
 
     let preloadTimeout;
     cell.addEventListener('mouseenter', () => {
