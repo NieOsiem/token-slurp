@@ -520,6 +520,44 @@
   color: var(--color-text-dark-secondary, #aaa);
 }
 
+/* ╔══════════════════════════════════════════════════════════════════════════╗ */
+/* ║  Clear all thumbnails dialogue                                          ║ */
+/* ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+.token-slurp-thumb-rebuild .window-content {
+  padding: 12px;
+}
+
+.ts-rebuild-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ts-rebuild-instructions {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+  color: var(--color-text-dark-secondary, #aaa);
+}
+
+.ts-rebuild-status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.9em;
+  color: var(--color-text-dark-secondary, #888);
+}
+
+.token-slurp-thumb-rebuild button {
+  width: auto !important;
+}
+
+.ts-rebuild-btn.ts-rebuild-confirm {
+  background: #4caf50;
+  border-color: #4caf50;
+  animation: ts-pulse 0.4s ease-in-out;
+}
+
 /* ── Search phase ─────────────────────────────────────────────────────────── */
 
 .ts-cleaner-search {

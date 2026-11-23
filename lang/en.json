@@ -37,6 +37,11 @@
         "label": "Open Thumbnail Cleaner",
         "hint":  "Remove cached thumbnails for a wildcard path so they are regenerated on next use."
       },
+      "thumbRebuild": {
+        "name":  "Clear All Thumbnails",
+        "label": "Open Clear All Thumbnails",
+        "hint":  "Rebuild every cached thumbnail used by this world. Foundry cannot delete files, so each one is overwritten in place with the current thumbnail settings."
+      },
       "ui2ShowMetaOverlay": {
         "name": "Window: Show Metadata Overlay",
         "hint": "Display a small badge on image cells (name, size, scale)."
@@ -128,6 +133,18 @@
       "confirmRegen":    "⚠ Click again to confirm regeneration",
       "regenerated":     "Regenerated {count} thumbnail(s).",
       "back":            "Back"
+    },
+    "thumbRebuild": {
+      "title":        "Clear All Thumbnails",
+      "instructions": "Rebuild every cached thumbnail for wildcard paths used by this world's tokens and actor prototypes. Existing thumbnail files are overwritten in place; source images are never modified.",
+      "button":       "Clear All Thumbnails",
+      "confirm":      "⚠ Click again to confirm",
+      "searching":    "Collecting cached thumbnails…",
+      "none":         "No cached thumbnails found for known wildcard paths.",
+      "progress":     "Rebuilding {done} / {total}…",
+      "done":         "Rebuilt {count} thumbnail(s).",
+      "partial":      "Rebuilt {count} thumbnail(s); {failed} failed.",
+      "error":        "Rebuild failed. Check the console for details."
     }
   }
 }

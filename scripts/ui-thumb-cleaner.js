@@ -1,4 +1,4 @@
-import { MODULE_ID } from './constants.js';
+import { MODULE_ID, FLAGS } from './constants.js';
 import { getSetting, SETTINGS } from './settings.js';
 import { resolveWildcard, thumbPathFor, ensureThumb } from './wildcard.js';
 
@@ -176,6 +176,151 @@ export function initThumbCleaner() {
     type:       ThumbCleanerApp,
     restricted: true, // GM only
   });
+
+  // ── Rebuild every cached thumbnail ────────────────────────────────────────
+
+  class ThumbRebuildApp extends HandlebarsApplicationMixin(ApplicationV2) {
+
+    static DEFAULT_OPTIONS = {
+      id:      `${MODULE_ID}-thumb-rebuild`,
+      classes: ['token-slurp-thumb-rebuild'],
+      tag:     'div',
+      window: {
+        title:     'TOKEN_SLURP.thumbRebuild.title',
+        resizable: false,
+      },
+      position: { width: 480, height: 'auto' },
+    };
+
+    static PARTS = {
+      main: { template: `modules/${MODULE_ID}/templates/ui-thumb-rebuild.hbs` },
+    };
+
+    async _prepareContext() {
+      return {};
+    }
+
+    async _onRender(_ctx, _opts) {
+      const el = this.element;
+      if (el.dataset.tsBound) return;
+      el.dataset.tsBound = '1';
+
+      const btn      = el.querySelector('.ts-rebuild-btn');
+      const statusEl = el.querySelector('.ts-rebuild-status');
+      let confirmed  = false;
+
+      btn.addEventListener('click', async () => {
+        if (!confirmed) {
+          confirmed = true;
+          btn.classList.add('ts-rebuild-confirm');
+          btn.textContent = game.i18n.localize('TOKEN_SLURP.thumbRebuild.confirm');
+          return;
+        }
+
+        confirmed = false;
+        btn.disabled = true;
+        btn.classList.remove('ts-rebuild-confirm');
+        btn.textContent = game.i18n.localize('TOKEN_SLURP.thumbRebuild.button');
+        statusEl.textContent = game.i18n.localize('TOKEN_SLURP.thumbRebuild.searching');
+
+        try {
+          const storageRoot = getSetting(SETTINGS.THUMB_STORAGE_PATH);
+          const jobs        = await _collectAllThumbJobs(storageRoot);
+
+          if (!jobs.length) {
+            statusEl.textContent = game.i18n.localize('TOKEN_SLURP.thumbRebuild.none');
+            btn.disabled = false;
+            return;
+          }
+
+          statusEl.textContent = game.i18n.format('TOKEN_SLURP.thumbRebuild.progress', {
+            done: 0, total: jobs.length,
+          });
+
+          const result = await _regenerateThumbs(jobs, storageRoot, (done, total) => {
+            statusEl.textContent = game.i18n.format('TOKEN_SLURP.thumbRebuild.progress', { done, total });
+          });
+
+          const key = result.failed ? 'TOKEN_SLURP.thumbRebuild.partial' : 'TOKEN_SLURP.thumbRebuild.done';
+          const msg = game.i18n.format(key, { count: result.done, failed: result.failed });
+          statusEl.textContent = msg;
+          ui.notifications.info(msg);
+        } catch (err) {
+          console.error(`[${MODULE_ID}] Rebuild-all error:`, err);
+          statusEl.textContent = game.i18n.localize('TOKEN_SLURP.thumbRebuild.error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+  }
+
+  game.settings.registerMenu(MODULE_ID, 'thumbRebuildAll', {
+    name:       'TOKEN_SLURP.settings.thumbRebuild.name',
+    label:      'TOKEN_SLURP.settings.thumbRebuild.label',
+    hint:       'TOKEN_SLURP.settings.thumbRebuild.hint',
+    icon:       'fas fa-eraser',
+    type:       ThumbRebuildApp,
+    restricted: true, // GM only
+  });
+}
+
+// ── Rebuild-all helpers ───────────────────────────────────────────────────────
+
+/**
+ * Every wildcard path referenced by world tokens or actor prototype tokens.
+ * @returns {Set<string>}
+ */
+function _collectWildcardPaths() {
+  const paths = new Set();
+
+  const add = (doc) => {
+    const path = doc?.flags?.[MODULE_ID]?.[FLAGS.WILDCARD_PATH];
+    if (path) paths.add(path);
+  };
+
+  for (const scene of game.scenes) {
+    for (const token of scene.tokens) add(token);
+  }
+  for (const actor of game.actors) add(actor.prototypeToken);
+
+  return paths;
+}
+
+/**
+ * Pair every existing cached thumbnail with its source file.
+ * Thumbnails for wildcard paths no longer referenced anywhere cannot be mapped
+ * back to a source (the filename is a one-way hash) and are skipped.
+ * @param {string} storageRoot
+ * @returns {Promise<{source: string, thumb: string}[]>}
+ */
+async function _collectAllThumbJobs(storageRoot) {
+  let existingNames;
+  try {
+    const result  = await FilePicker.browse('data', storageRoot);
+    existingNames = new Set((result.files ?? []).map(f => f.split('/').pop()));
+  } catch {
+    return [];
+  }
+
+  const jobs = new Map();
+
+  for (const path of _collectWildcardPaths()) {
+    let files;
+    try {
+      files = await resolveWildcard(path);
+    } catch (err) {
+      console.warn(`[${MODULE_ID}] Rebuild-all: could not resolve ${path}:`, err);
+      continue;
+    }
+
+    for (const source of files) {
+      const thumb = thumbPathFor(source, storageRoot);
+      if (existingNames.has(thumb.split('/').pop())) jobs.set(thumb, source);
+    }
+  }
+
+  return [...jobs].map(([thumb, source]) => ({ source, thumb }));
 }
 
 // ── Module-private helpers ────────────────────────────────────────────────────
@@ -209,43 +354,42 @@ async function _findExistingThumbs(sourceFiles, storageRoot) {
  * Source files are NEVER modified or overwritten.
  *
  * @param {{source: string, thumb: string}[]} thumbData
- * @param {string}   storageRoot
+ * @param {string}    storageRoot
+ * @param {function}  [onProgress] — (processed, total)
+ * @returns {Promise<{done: number, failed: number}>}
  */
-async function _regenerateThumbs(thumbData, storageRoot) {
+async function _regenerateThumbs(thumbData, storageRoot, onProgress = null) {
   const safeRoot = storageRoot.replace(/\/+$/, '');
+  const total    = thumbData.length;
+  const BATCH    = 8;
+  let done = 0;
+  let failed = 0;
 
-  const results = await Promise.allSettled(
-    thumbData.map(async (item) => {
-      // Safety check: ensure thumb path is within the expected storage root
-      if (!item.thumb.startsWith(`${safeRoot}/`)) {
-        console.error(`[${MODULE_ID}] Thumb cleaner refusing out-of-bounds path: ${item.thumb}`);
-        return;
-      }
+  const runOne = async (item) => {
+    // Safety check: ensure thumb path is within the expected storage root
+    if (!item.thumb.startsWith(`${safeRoot}/`)) {
+      console.error(`[${MODULE_ID}] Thumb cleaner refusing out-of-bounds path: ${item.thumb}`);
+      failed++;
+      return;
+    }
 
-      // Verify the source file exists before attempting regeneration
-      try {
-        const sourceDir  = item.source.substring(0, item.source.lastIndexOf('/'));
-        const sourceName = item.source.split('/').pop();
-        const result     = await FilePicker.browse('data', sourceDir);
-        const exists     = (result.files ?? []).some(f => f.split('/').pop() === sourceName);
-        if (!exists) {
-          console.warn(`[${MODULE_ID}] Source file not found: ${item.source}`);
-          return;
-        }
-      } catch (err) {
-        console.warn(`[${MODULE_ID}] Could not verify source file ${item.source}:`, err);
-        return;
-      }
+    // ensureThumb falls back to the source path when loading/generation fails
+    const url = await ensureThumb(item.source, item.thumb, true);
+    if (url === item.thumb) done++;
+    else {
+      failed++;
+      console.warn(`[${MODULE_ID}] Could not regenerate thumbnail for ${item.source}`);
+    }
+  };
 
-      // Regenerate the thumbnail from the source file
-      // Pass force=true to ensureThumb to overwrite existing thumbnails
-      await ensureThumb(item.source, item.thumb, true);
-    })
-  );
-
-  const failures = results.filter(r => r.status === 'rejected');
-  if (failures.length) {
-    console.warn(`[${MODULE_ID}] Thumb cleaner: ${failures.length} regeneration(s) failed:`);
-    failures.forEach(r => console.warn(' >', r.reason));
+  for (let i = 0; i < total; i += BATCH) {
+    await Promise.all(thumbData.slice(i, i + BATCH).map(runOne));
+    onProgress?.(Math.min(i + BATCH, total), total);
   }
+
+  if (failed) {
+    console.warn(`[${MODULE_ID}] Thumb regeneration: ${failed} of ${total} failed.`);
+  }
+
+  return { done, failed };
 }
