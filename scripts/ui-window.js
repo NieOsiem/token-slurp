@@ -1,7 +1,7 @@
 import { MODULE_ID, ANIMATION_OPTIONS, FLAGS } from './constants.js';
 import { getSetting, setSetting, SETTINGS } from './settings.js';
 import { getTokenFiles, switchTokenImage, renderImageGrid, computeGroups, balancedCols } from './grid.js';
-import { resolveDisplayUrlsProgressive, shouldUseThumb, isVideo } from './wildcard.js';
+import { resolveDisplayUrlsProgressive, shouldUseThumb, isVideo, parseFilenameMetadata } from './wildcard.js';
 import { getFavorites, toggleFavorite, pruneFavorites } from './favorites.js';
 
 let _SlurpWindowClass = null;
@@ -224,6 +224,7 @@ export function initSlurpWindow() {
       }
 
       this._renderFavorites();
+      if (hasGroups) this._autoCollapseGroups(currentSrc);
       requestAnimationFrame(() => this._reapplyGroupLayout());
     }
 
@@ -298,32 +299,59 @@ export function initSlurpWindow() {
           await this._selectFile(filePath);
         });
 
-        const remove = document.createElement('button');
-        remove.type      = 'button';
-        remove.className = 'ts-fav-remove';
-        remove.title     = game.i18n.localize('TOKEN_SLURP.window.favoriteUnpin');
-        remove.innerHTML = '<i class="fas fa-times"></i>';
-        remove.addEventListener('click', async ev => {
-          ev.stopPropagation();
-          await this._toggleFavorite(filePath);
-        });
-
-        slot.append(pick, remove);
+        slot.appendChild(pick);
         grid.appendChild(slot);
-        this._favElements.set(filePath, { slot, pick });
+        this._favElements.set(filePath, pick);
       }
 
       const count = this._favoritePaths.size;
+      const cols  = Math.min(Math.max(count, 1), 5);
+      grid.style.gridTemplateColumns = `repeat(${cols}, 64px)`;
       if (this._favCount) this._favCount.textContent = String(count);
       if (this._favEmpty) this._favEmpty.hidden = count > 0;
     }
 
     _updateFavoriteThumb(filePath, url) {
-      const entry = this._favElements.get(filePath);
-      if (entry) entry.pick.replaceChildren(buildFavMedia(url));
+      const pick = this._favElements.get(filePath);
+      if (pick) pick.replaceChildren(buildFavMedia(url));
     }
 
     // ── Group layout (tiling + row balancing) ─────────────────────────────────
+
+    /**
+     * Expand only the group containing the token's current image. With the
+     * selector gone this is the sole replacement for its default collapse mode.
+     * No match leaves every group expanded, as before.
+     */
+    _autoCollapseGroups(currentSrc) {
+      if (!this._groupElements.size) return;
+
+      let targetKey = null;
+
+      if (currentSrc) {
+        const meta = parseFilenameMetadata(currentSrc);
+        if (meta.group && this._groupElements.has(meta.group)) targetKey = meta.group;
+      }
+
+      if (!targetKey) {
+        const tokenName = this.tokenDoc?.name?.toLowerCase() ?? '';
+        const matched   = this._groups.find(
+          g => g.key !== '__ungrouped__' && g.label.toLowerCase() === tokenName
+        );
+        if (matched) targetKey = matched.key;
+      }
+
+      if (!targetKey) {
+        const ungrouped = this._groups.find(g => g.key === '__ungrouped__');
+        if (ungrouped?.files.includes(currentSrc)) targetKey = ungrouped.key;
+      }
+
+      if (!targetKey) return;
+
+      for (const [key, { el }] of this._groupElements) {
+        el.classList.toggle('ts-group--collapsed', key !== targetKey);
+      }
+    }
 
     _registerResizeObserver() {
       if (this._resizeObserver) return;
@@ -690,11 +718,11 @@ export function initSlurpWindow() {
 
       animWrap.append(animBtn, animMenu);
 
-      controls.append(followBtn, reloadBtn, favWrap, durationWrap, animWrap);
+      controls.append(favWrap, followBtn, reloadBtn, durationWrap, animWrap);
 
       const _stopEvent = ev => { ev.stopPropagation(); ev.stopImmediatePropagation(); };
       for (const node of [slider, animBtn, durationBtn, reloadBtn, followBtn, animMenu, durationPop, favBtn, favPop, favGrid]) {
-        for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart']) {
+        for (const evName of ['pointerdown', 'mousedown', 'dragstart', 'selectstart', 'dblclick']) {
           node.addEventListener(evName, _stopEvent, { capture: true });
         }
         node.addEventListener('touchstart', _stopEvent, { passive: false, capture: true });
