@@ -19,3 +19,16 @@ Foundry VTT v12 through v14.
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).
+
+## Releasing
+
+1. Bump `version` in `module.json`.
+2. Commit and push the change.
+3. Push a matching tag:
+
+```bash
+git tag -a vX.Y.Z -m "Token Slurp vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+GitHub Actions validates the tag against `module.json`, builds `token-slurp.zip`, and publishes the release assets.
