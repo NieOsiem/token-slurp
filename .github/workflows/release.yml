@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -11,12 +10,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      RUNTIME_PATHS: README.md LICENSE scripts styles templates lang packs assets
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Validate tag and manifest
+      - name: Validate tag
         id: version
         shell: bash
         run: |
@@ -25,7 +25,7 @@ jobs:
           version="${tag#v}"
 
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Tag '$tag' is not valid semver (expected vMAJOR.MINOR.PATCH)."
+            echo "::error::Tag '$tag' is not vMAJOR.MINOR.PATCH."
             exit 1
           fi
 
@@ -41,30 +41,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version='${{ steps.version.outputs.version }}'
-          tag="$GITHUB_REF_NAME"
-          repo="$GITHUB_REPOSITORY"
           staging="$(mktemp -d)"
 
           cp module.json "$staging/module.json"
           jq \
-            --arg version "$version" \
-            --arg manifest "https://github.com/$repo/releases/latest/download/module.json" \
-            --arg download "https://github.com/$repo/releases/download/$tag/token-slurp.zip" \
+            --arg version '${{ steps.version.outputs.version }}' \
+            --arg manifest "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/module.json" \
+            --arg download "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/module.zip" \
             '.version = $version | .manifest = $manifest | .download = $download' \
             "$staging/module.json" > "$staging/module.tmp.json"
           mv "$staging/module.tmp.json" "$staging/module.json"
 
-          cp README.md LICENSE "$staging/"
-          cp -R scripts styles templates lang "$staging/"
+          read -r -a paths <<< "$RUNTIME_PATHS"
+          for path in "${paths[@]}"; do
+            if [[ -e "$path" ]]; then
+              cp -R "$path" "$staging/"
+            fi
+          done
 
-          (cd "$staging" && zip -r -q -X "$GITHUB_WORKSPACE/token-slurp.zip" .)
-          cp "$staging/module.json" "$GITHUB_WORKSPACE/module.json"
+          (cd "$staging" && zip -rqX "$GITHUB_WORKSPACE/module.zip" .)
+          cp "$staging/module.json" module.json
 
-          unzip -Z1 token-slurp.zip | grep -qx 'module.json' || {
-            echo "::error::module.json is not at the zip root."
-            exit 1
-          }
+          unzip -Z1 module.zip | grep -qx module.json
 
       - name: Publish release
         shell: bash
@@ -73,14 +71,13 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          title="Token Slurp v${{ steps.version.outputs.version }}"
 
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" module.json token-slurp.zip \
+            gh release upload "$tag" module.json module.zip \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$tag" module.json token-slurp.zip \
+            gh release create "$tag" module.json module.zip \
               --repo "$GITHUB_REPOSITORY" \
-              --title "$title" \
+              --title "v${{ steps.version.outputs.version }}" \
               --generate-notes
           fi
