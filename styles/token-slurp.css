@@ -92,7 +92,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: var(--ts-zoom-origin, center center);
   display: block;
   pointer-events: none;
   transform:        scale(var(--ts-zoom, 1));
@@ -183,6 +183,10 @@
 
 .ts-group-header:hover .ts-group-label {
   color: var(--color-border-highlight, #ff6400);
+}
+
+.ts-group.ts-group--current .ts-group-label {
+  color: var(--color-border-highlight-alt, #f0d755);
 }
 
 .ts-group-rule {

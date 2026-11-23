@@ -239,16 +239,14 @@ async function generateThumbBlob(src) {
     const draw = () => {
       try {
         const thumbSize = getSetting(SETTINGS.THUMB_SIZE);
-        const canvas    = document.createElement('canvas');
-        canvas.width  = thumbSize;
-        canvas.height = thumbSize;
-        const ctx  = canvas.getContext('2d');
         const sw   = isVid ? el.videoWidth  : el.naturalWidth;
         const sh   = isVid ? el.videoHeight : el.naturalHeight;
-        const side = Math.min(sw, sh);
-        const ox   = (sw - side) / 2;
-        const oy   = (sh - side) / 2;
-        ctx.drawImage(el, ox, oy, side, side, 0, 0, thumbSize, thumbSize);
+        const scale = thumbSize / Math.max(sw, sh);
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.max(1, Math.round(sw * scale));
+        canvas.height = Math.max(1, Math.round(sh * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(el, 0, 0, sw, sh, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(blob => resolve(blob), 'image/webp', 0.85);
       } catch { resolve(null); }
     };

@@ -305,7 +305,8 @@ export function renderImageGrid(opts) {
 
     for (const group of groups) {
       const groupEl     = document.createElement('div');
-      groupEl.className = `ts-group${group.key === '__ungrouped__' ? ' ts-group--ungrouped' : ''}`;
+      const isCurrentGroup = group.files.includes(currentSrc);
+      groupEl.className = `ts-group${group.key === '__ungrouped__' ? ' ts-group--ungrouped' : ''}${isCurrentGroup ? ' ts-group--current' : ''}`;
 
       const headerEl     = document.createElement('div');
       headerEl.className = 'ts-group-header';

@@ -515,6 +515,11 @@ export function initSlurpWindow() {
       if (!container) return;
       container.querySelectorAll('.ts-cell--active').forEach(c => c.classList.remove('ts-cell--active'));
       container.querySelector(`.ts-cell[data-src="${CSS.escape(src)}"]`)?.classList.add('ts-cell--active');
+
+      for (const [key, { el }] of this._groupElements) {
+        const group = this._groups.find(g => g.key === key);
+        el.classList.toggle('ts-group--current', !!group?.files.includes(src));
+      }
     }
 
     // ── Header controls ───────────────────────────────────────────────────────
